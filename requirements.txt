@@ -1,2 +1,9 @@
 uv
 pathlib
+langgraph
+ollama
+psutil
+typ
+rich
+pydantic
+python-dotenv
