@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  edgemind:
+    build: .
+    image: edgemind
+    container_name: edgemind
+    restart: unless-stopped
