@@ -1,6 +1,7 @@
 uv
 pathlib
 langgraph
+langchain
 ollama
 psutil
 typ
