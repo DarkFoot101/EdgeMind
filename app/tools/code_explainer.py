@@ -4,7 +4,7 @@ from app.models.model_router import select_model
 from app.models.ollama_client import generate_response
 
 
-def explain_code(file_path: str):
+def explain_code(file_path: str , selected_model: str):
 
     file = Path(file_path)
 
@@ -17,7 +17,9 @@ def explain_code(file_path: str):
     if len(code) > 100000:
         code = code[:100000]
 
-    model = select_model("explain")
+    # the tool should select the model required to execute the task
+    # model = select_model("explain")
+    # model_execution = select_model("explain", model)
 
     prompt = f"""
         You are a senior software engineer.
@@ -38,7 +40,7 @@ def explain_code(file_path: str):
 
     explanation = generate_response(
         prompt=prompt,
-        model=model
+        model=selected_model
     )
 
     return explanation
