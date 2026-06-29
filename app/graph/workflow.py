@@ -1,4 +1,6 @@
 # pyrefly: ignore [missing-import]
+from app.graph.nodes import evaluate_task
+# pyrefly: ignore [missing-import]
 from langgraph.graph import StateGraph
 # pyrefly: ignore [missing-import]
 from langgraph.graph import END
@@ -38,6 +40,10 @@ graph.add_node(
     "advance",
     advance_step
 )
+graph.add_node(
+    "evaluator",
+    evaluate_task
+)
 
 # set the entry point for the planner node
 graph.set_entry_point("planner")
@@ -49,9 +55,11 @@ graph.add_edge("task", "router")
 
 graph.add_edge("router", "executor")
 
-graph.add_edge("executor", "advance")
+graph.add_edge("executor", "evaluator")
 
-# now we are adding teh conditional edge, that acts with the advanced step 
+graph.add_edge("evaluator", "advance")
+
+# now we are adding the conditional edge, that acts with the advanced step 
 graph.add_condtional_edges(
     'advance',
     should_continue,

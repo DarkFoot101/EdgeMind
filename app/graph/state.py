@@ -7,3 +7,4 @@ class EdgeMindState(TypedDict):
     selected_model: str
     file_path: str
     result: str
+    execution_success: bool

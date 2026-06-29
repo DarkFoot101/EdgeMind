@@ -6,6 +6,7 @@ from app.tools.debug_assistant import debug_error
 from app.tools.deployment_generator import generate_dockerfile, save_dockerfile
 from app.tools.requirements_generator import generate_requirements, save_requirements
 from app.tools.docker_compose_generator import generate_compose, save_composee
+from app.graph.evaluator import evaluate_execution
 from app.graph.planner import create_plan
 
 
@@ -122,7 +123,18 @@ def advance_step(state):
 
 # this makes the agent to take an advance step while planning goes on 
 def should_continue(state):
+    if not state["execution_success"]:
+        return "finish"
     if state["current_step"] >= len(state["plan"]):
         return "finish"
 
     return "continue"
+
+# evaluation of the agent to see if finished the task or not
+def evaluate_task(state):
+    success = evaluate_execution(
+        state["result"]
+    )
+    state["execution_success"] = success
+    return state
+
