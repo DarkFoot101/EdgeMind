@@ -8,7 +8,6 @@ from langgraph.graph import END
 from app.graph.state import EdgeMindState
 
 from app.graph.nodes import (
-    classify_task,
     route_model,
     execute_task,
     get_current_task,
@@ -60,7 +59,7 @@ graph.add_edge("executor", "evaluator")
 graph.add_edge("evaluator", "advance")
 
 # now we are adding the conditional edge, that acts with the advanced step 
-graph.add_condtional_edges(
+graph.add_conditional_edges(
     'advance',
     should_continue,
     {

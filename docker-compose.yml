@@ -1,8 +1,9 @@
 version: '3'
-
 services:
   edgemind:
     build: .
-    image: edgemind
-    container_name: edgemind
     restart: unless-stopped
+    environment: []
+    volumes: []
+    depends_on: []
+    networks: {}

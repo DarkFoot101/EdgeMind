@@ -4,8 +4,8 @@ from app.tools.project_analyzer import analyze_project
 from app.tools.code_explainer import explain_code
 from app.tools.debug_assistant import debug_error
 from app.tools.deployment_generator import generate_dockerfile, save_dockerfile
-from app.tools.requirements_generator import generate_requirements, save_requirements
-from app.tools.docker_compose_generator import generate_compose, save_composee
+from app.tools.requirements_generator import save_requirements
+from app.tools.docker_compose_generator import generate_docker_compose, save_docker_compose
 from app.graph.evaluator import evaluate_execution
 from app.graph.planner import create_plan
 
@@ -33,7 +33,7 @@ from app.graph.planner import create_plan
 
 # getting the current task
 def get_current_task(state):
-
+    print("task node", state)
     state["current_task"] = state["plan"][
         state["current_step"]
     ]
@@ -103,6 +103,8 @@ def execute_task(state):
 
 # planner node
 def planner_node(state):
+    print("planner before", state)
+
     plan = create_plan(
         state["user_query"]
     )
@@ -110,16 +112,20 @@ def planner_node(state):
     state["current_step"] = 0
     state["current_task"] = plan[0]
 
+    print("planenr after", state)
+
     return state
 
 # this makes the agent go iteratively 
 def advance_step(state):
+    """
+    Move to the next task in the execution plan.
+    """
     state["current_step"] += 1
     if state["current_step"] < len(state["plan"]):
-        state["current_task"] = state["plan"][
-            state["current_step"]
-        ]
-        return state
+        state["current_task"] = state["plan"][state["current_step"]]
+
+    return state
 
 # this makes the agent to take an advance step while planning goes on 
 def should_continue(state):
