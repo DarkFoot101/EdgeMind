@@ -8,6 +8,7 @@ from app.tools.requirements_generator import save_requirements
 from app.tools.docker_compose_generator import generate_docker_compose, save_docker_compose
 from app.graph.evaluator import evaluate_execution
 from app.graph.planner import create_plan
+from app.memory.memory_manager import save_execution, get_recent_history, search_memory
 
 
 # # classifier node functionality
@@ -106,7 +107,8 @@ def planner_node(state):
     print("planner before", state)
 
     plan = create_plan(
-        state["user_query"]
+        user_query = state["user_query"],
+        memory = state["memory_context"]
     )
     state["plan"] = plan 
     state["current_step"] = 0
@@ -143,4 +145,30 @@ def evaluate_task(state):
     )
     state["execution_success"] = success
     return state
+
+# new node to save up the memory 
+def memory_update(state):
+    save_execution(state)
+    return state 
+
+# memory lookup node for the agent to use the memory 
+def memory_lookup(state):
+    """Search previously executed task before planning"""
+    rows = search_memory(
+        state.get("project_path", ".")
+    )
+    if not rows:
+        state["memory_context"] = ""
+        return state 
+    
+    context = ""
+    for query, task, result in rows:
+        context += (
+            f"Previous Query: {query}"
+            f"Task: {task}"
+            f"Result: {result}"
+            "\n"
+        )
+    state['memory_context'] = context
+    return state 
 

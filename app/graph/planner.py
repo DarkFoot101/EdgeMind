@@ -3,9 +3,13 @@
 # for V2 - planning is based on complex tasks that come up, there we will use the LLM
 
 
-def create_plan(user_query : str):
+def create_plan(user_query : str, memory : str = ""):
     query = user_query.lower()
     plan = []
+
+    if memory:
+        plan.append("Use memory context")
+    
 
     if "analyze" in query:
         plan.append("analyze")

@@ -1,6 +1,4 @@
 # pyrefly: ignore [missing-import]
-from app.graph.nodes import evaluate_task
-# pyrefly: ignore [missing-import]
 from langgraph.graph import StateGraph
 # pyrefly: ignore [missing-import]
 from langgraph.graph import END
@@ -13,12 +11,19 @@ from app.graph.nodes import (
     get_current_task,
     advance_step,
     should_continue,
-    planner_node
+    planner_node,
+    evaluate_task,
+    memory_update,
+    memory_lookup
 )
 
 graph = StateGraph(EdgeMindState)
 
 # creating the graph nodes
+graph.add_node(
+    "memory_lookup",
+    memory_lookup
+)
 graph.add_node(
     "planner",
     planner_node
@@ -36,6 +41,11 @@ graph.add_node(
     execute_task
 )
 graph.add_node(
+    "memory",
+    memory_update
+)
+
+graph.add_node(
     "advance",
     advance_step
 )
@@ -45,9 +55,11 @@ graph.add_node(
 )
 
 # set the entry point for the planner node
-graph.set_entry_point("planner")
+graph.set_entry_point("memory_lookup")
 
 # adding the edges
+graph.add_edge("memory_lookup", "planner")
+
 graph.add_edge("planner", "task")
 
 graph.add_edge("task", "router")
@@ -56,7 +68,9 @@ graph.add_edge("router", "executor")
 
 graph.add_edge("executor", "evaluator")
 
-graph.add_edge("evaluator", "advance")
+graph.add_edge("evaluator", 'memory')
+
+graph.add_edge("memory", "advance")
 
 # now we are adding the conditional edge, that acts with the advanced step 
 graph.add_conditional_edges(

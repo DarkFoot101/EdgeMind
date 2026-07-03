@@ -1,227 +1,557 @@
-# 🚀 EdgeMind
+<div align = "center">
+ 
+# EdgeMind
 
-### A Resource-Aware Agentic Coding Assistant for Efficient Edge AI Deployment
+</div>
 
-EdgeMind is a terminal-first, locally running AI software engineering assistant designed for resource-constrained environments. Unlike traditional coding assistants that rely heavily on cloud infrastructure, EdgeMind focuses on intelligent local execution through dynamic model routing, resource-aware orchestration, and autonomous software engineering workflows.
+<div align="center">
 
-The project explores how Agentic AI systems can efficiently perform software engineering tasks such as project analysis, code explanation, debugging, and deployment generation while operating entirely on consumer-grade hardware.
+## A Resource-Aware Agentic Coding Assistant for Efficient Edge AI Deployment
 
----
+*"Building intelligent software engineering agents that run locally on consumer hardware."*
 
-## 🎯 Vision
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![LangGraph](https://img.shields.io/badge/LangGraph-Agentic_Workflow-orange)
+![Ollama](https://img.shields.io/badge/Ollama-Local_LLM-green)
+![SQLite](https://img.shields.io/badge/SQLite-Memory_Layer-blue)
+![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
+![Status](https://img.shields.io/badge/Status-Active_Development-success)
 
-Modern AI coding assistants are powerful but heavily dependent on cloud infrastructure, high operational costs, and continuous internet connectivity.
-
-EdgeMind aims to answer a simple question:
-
-> Can autonomous software engineering agents operate efficiently on local devices while adapting to available computational resources?
-
-The project combines Edge AI, Agentic AI, Local Inference, and Resource-Aware Computing to create a practical coding assistant capable of running on laptops and other edge devices.
-
----
-
-## ✨ Features
-
-### Current Features
-
-* 📊 Project Analysis
-* 📖 Code Explanation
-* 🐞 Error Debugging Assistance
-* 🐳 Dockerfile Generation
-* 📦 Requirements.txt Generation
-* ⚙️ Docker Compose Generation
-* 🧠 Local LLM Inference
-* 📈 System Resource Monitoring
-* 🔀 Dynamic Model Routing
-* 💻 Terminal-Based CLI Interface
-
-### Planned Features
-
-* 🕸️ LangGraph-Based Agent Orchestration
-* 🧠 Persistent Memory Layer
-* 🔧 MCP Tool Integration
-* ✏️ Autonomous File Editing
-* 📂 Repository-Wide Context Understanding
-* 🧩 VS Code Extension
-* ⚡ MLX Acceleration for Apple Silicon
-* 🤝 Multi-Agent Collaboration
+</div>
 
 ---
 
-## 🏗️ Architecture
+# 📖 Overview
+
+EdgeMind is a **terminal-first autonomous software engineering assistant** designed to operate **entirely on local hardware**.
+
+Unlike conventional AI coding assistants that rely heavily on cloud infrastructure, EdgeMind focuses on **resource-aware execution**, **dynamic model routing**, and **agentic orchestration** to intelligently perform software engineering tasks on consumer-grade devices.
+
+Rather than being "another chatbot", EdgeMind behaves like a lightweight software engineer capable of:
+
+- Understanding projects
+- Explaining code
+- Debugging errors
+- Generating deployment files
+- Planning execution steps
+- Remembering previous project interactions
+- Selecting the best local LLM for every task
+
+All while running completely offline using local language models.
+
+---
+
+# 🎯 Vision
+
+Modern AI coding assistants are powerful but expensive.
+
+They often require:
+
+- Continuous internet connectivity
+- Cloud GPUs
+- API subscriptions
+- External infrastructure
+
+EdgeMind explores a different question:
+
+> **Can autonomous software engineering agents operate efficiently on local consumer hardware while intelligently adapting to limited computational resources?**
+
+The project combines:
+
+- Edge AI
+- Agentic AI
+- Local LLM Inference
+- Resource-Aware Computing
+- Autonomous Planning
+
+to build an intelligent coding assistant that works entirely on edge devices.
+
+---
+
+# 🧠 Core Philosophy
+
+EdgeMind follows four simple principles.
+
+### 🖥️ Local First
+
+Everything should execute locally whenever possible.
+
+No cloud dependency.
+
+---
+
+### ⚡ Resource Aware
+
+The assistant continuously monitors system resources and dynamically adapts model selection based on available hardware.
+
+---
+
+### 🤖 Agentic Workflow
+
+Instead of executing one command at a time, EdgeMind plans, routes, evaluates and remembers tasks.
+
+---
+
+### 🧩 Keep It Simple (KISS)
+
+Rather than building hundreds of disconnected AI features,
+
+EdgeMind focuses on solving one problem extremely well:
+
+> Building a lightweight autonomous software engineering assistant.
+
+---
+
+# ✨ Current Features
+
+## 🤖 AI Features
+
+- ✅ Intelligent Project Analysis
+- ✅ AI-Powered Code Explanation
+- ✅ Automated Debugging Assistant
+- ✅ Dynamic Task Planning
+- ✅ LangGraph Agent Workflow
+- ✅ Execution Evaluation
+- ✅ Local LLM Inference
+- ✅ Dynamic Model Routing
+
+---
+
+## ⚙️ Deployment Features
+
+- ✅ Dockerfile Generation
+- ✅ Requirements.txt Generation
+- ✅ Docker Compose Generation
+
+---
+
+## 💻 System Features
+
+- ✅ Resource Monitoring
+- ✅ CPU Monitoring
+- ✅ RAM Monitoring
+- ✅ SQLite Project Memory
+- ✅ Terminal-Based CLI
+
+---
+
+# 🚀 Future Features
+
+- 🔄 Intelligent Code Editing
+- 🧠 Context-Aware Project Memory
+- 💻 VS Code Extension
+- ⚡ Apple MLX Optimization
+- 🔌 MCP (Model Context Protocol)
+- 📦 Production Packaging
+
+---
+
+# 🏗️ Current System Architecture
 
 ```text
-User
- │
- ▼
-EdgeMind CLI
- │
- ▼
-Task Router
- │
- ├── Project Analyzer
- ├── Code Explainer
- ├── Debug Assistant
- ├── Dockerfile Generator
- ├── Requirements Generator
- └── Compose Generator
- │
- ▼
-Model Router
- │
- ▼
-Local LLM Runtime (Ollama)
- │
- ▼
-Qwen / Phi / Future Models
+                           User
+                             │
+                             ▼
+                     EdgeMind CLI
+                             │
+                             ▼
+                     Memory Lookup
+                             │
+                             ▼
+                          Planner
+                             │
+                             ▼
+                     Current Task
+                             │
+                             ▼
+                     Model Router
+                             │
+                             ▼
+                     Tool Executor
+                             │
+        ┌──────────┬──────────┬──────────┬──────────┐
+        ▼          ▼          ▼          ▼
+  Project      Code      Debug      Deployment
+ Analyzer   Explainer   Assistant    Generator
+                             │
+                             ▼
+                  Execution Evaluator
+                             │
+                             ▼
+                  SQLite Memory Update
+                             │
+                             ▼
+                        Continue?
 ```
 
 ---
 
-## 🧠 Core Concepts
+# 🧩 Core Components
 
-### Edge AI
+## 🧠 Planner
 
-AI models executed directly on local devices without relying on cloud infrastructure.
+Responsible for converting a user request into an executable task plan.
 
-### Agentic AI
+Example:
 
-Autonomous systems capable of reasoning, planning, tool usage, and decision making.
+```
 
-### Dynamic Model Routing
+Debug my project and generate Dockerfile
 
-Selecting the most suitable model based on task complexity and available hardware resources.
+```
 
-### Local Inference
+becomes
 
-Executing language models locally to ensure privacy, low latency, and offline accessibility.
+```
 
-### Resource-Aware Computing
+Analyze Project
+↓
+Debug Errors
+↓
+Generate Dockerfile
 
-Adapting execution strategies according to CPU, memory, and device constraints.
+```
 
 ---
 
-## 📁 Project Structure
+## 🗂️ Memory Layer
+
+Uses SQLite to store previous project executions.
+
+Instead of remembering conversations,
+
+EdgeMind remembers:
+
+- Previous project analyses
+- Previous debugging sessions
+- Generated deployment files
+- Execution history
+- Task outcomes
+
+---
+
+## 🔀 Model Router
+
+Chooses the best local model for every task.
+
+Current routing strategy:
+
+| Task | Model |
+|-------|--------|
+| Analyze | Phi-3 Mini |
+| Deployment | Phi-3 Mini |
+| Explain | Qwen2.5-Coder |
+| Debug | Qwen2.5-Coder |
+
+Future versions will also consider:
+
+- Available RAM
+- CPU Usage
+- Battery Level
+- Thermal Constraints
+
+before selecting models.
+
+---
+
+## 🧠 Execution Evaluator
+
+Every completed task is validated before the planner proceeds.
+
+Instead of blindly executing workflows,
+
+EdgeMind asks:
+
+> "Was this execution successful?"
+
+before moving to the next task.
+
+---
+
+## 📊 Resource Monitor
+
+Continuously monitors:
+
+- CPU Utilization
+- Available RAM
+
+using **psutil**.
+
+This information is later used for intelligent model selection.
+
+---
+
+## 💾 SQLite Memory
+
+Instead of storing chat history,
+
+EdgeMind stores:
+
+- Project Path
+- Executed Task
+- Selected Model
+- Execution Result
+- Success Status
+- Timestamp
+
+allowing future executions to become context-aware.
+
+---
+
+# 📂 Project Structure
 
 ```text
-EdgeMind/
+EdgeMind
 │
-├── app/
-│   ├── cli/
-│   ├── graph/
-│   ├── memory/
-│   ├── models/
-│   ├── resources/
-│   └── tools/
+├── app
+│   │
+│   ├── cli
+│   │     └── main.py
+│   │
+│   ├── graph
+│   │     ├── workflow.py
+│   │     ├── planner.py
+│   │     ├── evaluator.py
+│   │     ├── nodes.py
+│   │     └── state.py
+│   │
+│   ├── memory
+│   │     ├── database.py
+│   │     ├── schema.py
+│   │     └── memory_manager.py
+│   │
+│   ├── models
+│   │     ├── ollama_client.py
+│   │     └── model_router.py
+│   │
+│   ├── resources
+│   │     └── system_monitor.py
+│   │
+│   └── tools
+│         ├── project_analyzer.py
+│         ├── code_explainer.py
+│         ├── debug_assistant.py
+│         ├── deployment_generator.py
+│         ├── requirements_generator.py
+│         └── docker_compose_generator.py
 │
-├── tests/
-├── docs/
-├── data/
+├── tests
+│
+├── docs
 │
 ├── README.md
 ├── requirements.txt
-└── .env
+└── edgemind.db
 ```
 
 ---
 
-## 🔨 Tech Stack
+# 🔨 Tech Stack
 
-### AI & Agent Frameworks
+## AI Framework
 
-* LangGraph (Upcoming)
-* Ollama
-* Qwen2.5-Coder
-* Phi Models (Planned)
+- LangGraph
 
-### Backend
+## Local Inference
 
-* Python 3.11+
-* Typer CLI
-* Pydantic
+- Ollama
 
-### Resource Monitoring
+## Language Models
 
-* psutil
+- Qwen2.5-Coder 3B
+- Phi-3 Mini
 
-### Deployment
+## Backend
 
-* Docker
-* Docker Compose
+- Python
+- Typer CLI
+- SQLite
 
-### Future Optimization
+## Resource Monitoring
 
-* MLX
-* MCP (Model Context Protocol)
+- psutil
+
+## Deployment
+
+- Docker
+- Docker Compose
+
+## Future Runtime
+
+- Apple MLX
+
+## Future Standard
+
+- MCP (Model Context Protocol)
 
 ---
 
-## ⚡ Installation
+# 🎯 Research Contribution
 
-### Clone Repository
+EdgeMind is **not** another chatbot.
+
+Its contribution lies in combining:
+
+- Resource-Aware Computing
+- Dynamic Model Routing
+- LangGraph Agent Orchestration
+- Local LLM Inference
+- Persistent Project Memory
+
+to build a lightweight software engineering assistant capable of operating entirely on consumer hardware.
+
+The project investigates:
+
+> **Can autonomous software engineering agents intelligently perform development workflows without relying on cloud infrastructure?**
+---
+# ⚙️ Installation
+
+## Clone the Repository
 
 ```bash
 git clone https://github.com/your-username/EdgeMind.git
 cd EdgeMind
 ```
 
-### Create Virtual Environment
+---
+
+## Create a Virtual Environment
+
+EdgeMind uses **uv** for dependency management.
 
 ```bash
 uv venv
+```
+
+Activate the environment.
+
+### macOS / Linux
+
+```bash
 source .venv/bin/activate
 ```
 
-### Install Dependencies
+### Windows
+
+```powershell
+.venv\Scripts\activate
+```
+
+---
+
+## Install Dependencies
 
 ```bash
 uv pip install -r requirements.txt
 ```
 
-### Install Local Model Runtime
+---
 
-Install Ollama and pull a coding model:
+## Install Ollama
+
+Download Ollama from:
+
+https://ollama.com
+
+Verify installation.
+
+```bash
+ollama --version
+```
+
+---
+
+## Download Local Models
+
+### Qwen2.5 Coder
 
 ```bash
 ollama pull qwen2.5-coder:3b
 ```
 
+### Phi-3 Mini
+
+```bash
+ollama pull phi3:mini
+```
+
+Verify the installed models.
+
+```bash
+ollama list
+```
+
+Expected:
+
+```text
+qwen2.5-coder:3b
+
+phi3:mini
+```
+
 ---
 
-## 🚀 Usage
+## Initialize SQLite Database
 
-### Analyze Project
+Run once.
+
+```python
+from app.memory.schema import initialize_database
+
+initialize_database()
+```
+
+This creates:
+
+```
+edgemind.db
+```
+
+---
+
+# 🚀 Usage
+
+## Analyze a Project
 
 ```bash
 python -m app.cli.main analyze
 ```
 
-### Explain Code
+---
+
+## Explain a Python File
 
 ```bash
 python -m app.cli.main explain app/models/model_router.py
 ```
 
-### Debug Errors
+---
+
+## Debug an Error Log
 
 ```bash
-python -m app.cli.main debug error.txt
+python -m app.cli.main debug sample_error.txt
 ```
 
-### Generate Dockerfile
+---
+
+## Generate Dockerfile
 
 ```bash
 python -m app.cli.main generate-docker
 ```
 
-### Generate Requirements
+---
+
+## Generate Requirements
 
 ```bash
 python -m app.cli.main generate-requirements
 ```
 
-### Generate Docker Compose
+---
+
+## Generate Docker Compose
 
 ```bash
 python -m app.cli.main generate-compose
@@ -229,81 +559,276 @@ python -m app.cli.main generate-compose
 
 ---
 
-## 🔬 Research Focus
+# 🧪 Running Tests
+
+EdgeMind includes integration tests for the complete agent workflow.
+
+Run:
+
+```bash
+python -m tests.test_agent_workflow
+```
+
+The integration test validates:
+
+- Planner
+- Model Router
+- Project Analyzer
+- Code Explainer
+- Debug Assistant
+- Deployment Tools
+- Execution Evaluator
+- SQLite Memory
+
+---
+
+# 📊 Evaluation Metrics
+
+EdgeMind is evaluated using the following metrics.
+
+| Metric | Description |
+|---------|-------------|
+| Inference Latency | Time taken by local models |
+| CPU Utilization | Resource consumption |
+| Memory Usage | RAM utilization |
+| Task Completion | Successful execution percentage |
+| Execution Quality | Quality of generated outputs |
+| Resource Efficiency | Compute-aware routing performance |
+
+---
+
+# 📈 Development Roadmap
+
+## ✅ Phase 1 — Core AI Utilities
+
+Completed
+
+- Local LLM Integration
+- Ollama Runtime
+- Resource Monitoring
+- Project Analysis
+- Code Explanation
+- Debug Assistant
+- Dockerfile Generation
+- Requirements Generation
+- Docker Compose Generation
+
+---
+
+## ✅ Phase 2 — Agentic Orchestration
+
+Completed
+
+- LangGraph Workflow
+- Planner Node
+- Dynamic Task Planning
+- Model Router
+- Execution Evaluator
+- Multi-Step Agent Execution
+
+---
+
+## ✅ Phase 3 — Persistent Project Memory
+
+Completed
+
+- SQLite Database
+- Memory Lookup
+- Memory Update
+- Project-Based Execution History
+- Context-Aware Planning Foundation
+
+---
+
+## 🚧 Phase 4 — Intelligent Code Editing
+
+In Progress
+
+Planned Features
+
+- Generate Code Fixes
+- Preview Code Changes
+- Apply Approved Changes
+- File Safety Validation
+- Automatic Backup Before Editing
+
+---
+
+## 📅 Phase 5 — VS Code Extension
+
+Planned
+
+- Native VS Code Extension
+- Inline AI Suggestions
+- Code Actions
+- Project Sidebar
+- Integrated Terminal Commands
+
+---
+
+## 📅 Phase 6 — Apple MLX Optimization
+
+Planned
+
+Current Runtime
+
+```
+Ollama
+```
+
+Future Runtime
+
+```
+MLX
+```
+
+Goals
+
+- Faster Inference
+- Better Apple Silicon Performance
+- Reduced Memory Usage
+- Efficient Local Execution
+
+---
+
+## 📅 Phase 7 — MCP Integration
+
+Planned
+
+EdgeMind tools will be exposed through the **Model Context Protocol (MCP)**.
+
+This allows EdgeMind to become compatible with modern AI agents and IDEs while maintaining the same backend architecture.
+
+Planned MCP Tools
+
+- Project Analyzer
+- Code Explainer
+- Debug Assistant
+- Deployment Generator
+- Code Editor
+- Project Memory
+
+---
+
+# 🔬 Research Focus
 
 This project investigates:
 
-* Resource-Aware Agentic AI
-* Edge-Based Software Engineering Agents
-* Dynamic Model Routing
-* Efficient Local Inference
-* Autonomous Coding Assistants
-* Edge Deployment of LLM Systems
+- Resource-Aware Computing
+- Dynamic Model Routing
+- Edge AI
+- Agentic AI
+- Local LLM Inference
+- Autonomous Software Engineering
+- Efficient AI Systems
+- Intelligent Planning
+- Persistent Project Memory
 
 ---
 
-## 📊 Evaluation Metrics
+# 🎓 Academic Information
 
-The system will be evaluated using:
+**Project Title**
 
-* Inference Latency
-* Memory Usage
-* CPU Utilization
-* Task Completion Quality
-* Resource Efficiency
-* Local Execution Performance
+> EdgeMind: A Resource-Aware Agentic Coding Assistant for Efficient Edge AI Deployment
 
 ---
 
-## 🎓 Academic Context
+**Project Type**
 
-**Project Type:** Research
-
-**Domain:** Artificial Intelligence, Edge AI, Agentic AI
-
-**SDG Alignment:** SDG 9 – Industry, Innovation and Infrastructure
+Research
 
 ---
 
-## 🛣️ Roadmap
+**Domain**
 
-### Phase 1
+Artificial Intelligence
 
-* Local LLM Integration
-* Resource Monitoring
-* Project Analysis
-* Code Understanding
+Edge AI
 
-### Phase 2
+Agentic AI
 
-* Deployment Generation
-* LangGraph Orchestration
-* Agent Workflow Design
-
-### Phase 3
-
-* Memory Layer
-* MCP Integration
-* Autonomous File Editing
-
-### Phase 4
-
-* VS Code Extension
-* MLX Optimization
-* Multi-Agent Workflows
+Software Engineering
 
 ---
 
-## 🤝 Contributing
+**Relevant SDG**
 
-Contributions, ideas, research suggestions, and discussions are welcome.
+SDG 9
+
+Industry, Innovation and Infrastructure
 
 ---
 
-## 📜 License
+# 🌟 Why EdgeMind?
+
+Unlike many student projects that simply wrap cloud APIs into chatbots,
+
+EdgeMind focuses on solving a real systems engineering problem.
+
+It investigates how autonomous software engineering agents can:
+
+- Operate fully offline
+- Adapt to hardware limitations
+- Route tasks intelligently
+- Persist project knowledge
+- Execute software engineering workflows
+- Scale from lightweight laptops to production-ready environments
+
+The project emphasizes **AI Systems Engineering**, combining planning, orchestration, resource awareness, memory, and local inference into one unified architecture.
+
+---
+
+# 🤝 Contributing
+
+Contributions are always welcome.
+
+If you would like to improve EdgeMind,
+
+feel free to:
+
+- Open an Issue
+- Submit a Pull Request
+- Suggest New Features
+- Improve Documentation
+- Share Research Ideas
+
+---
+
+# 📜 License
 
 This project is released under the MIT License.
 
+Feel free to use, modify, and build upon this work.
+
 ---
 
-### Built with passion for Edge AI, Agentic Systems, and Software Engineering Research.
+# 👨‍💻 Author
+
+**Akhilesh Venkiteswaran**
+
+B.Tech Artificial Intelligence & Data Science
+
+Chennai Institute of Technology
+
+---
+
+# ⭐ Future Vision
+
+EdgeMind is being developed as a lightweight software engineering agent capable of running entirely on consumer hardware.
+
+Rather than competing with large cloud-based coding assistants,
+
+its goal is to demonstrate that **efficient, resource-aware autonomous agents** can perform meaningful software engineering tasks locally while remaining modular, explainable, and extensible.
+
+The long-term vision is to evolve EdgeMind into a production-ready AI engineering assistant that seamlessly integrates with developer workflows through VS Code, MLX acceleration, and the Model Context Protocol.
+
+---
+
+<div align="center">
+
+## ⭐ If you found this project interesting, consider giving it a star!
+
+**Building the future of Edge AI, one agent at a time.**
+
+</div>
