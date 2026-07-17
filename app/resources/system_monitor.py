@@ -10,4 +10,5 @@ def get_system_resources():
             )
     }
 
-print(get_system_resources()) 
+if __name__ == "__main__":
+    print(get_system_resources()) 

@@ -75,8 +75,8 @@ def search_memory(user_query : str):
         WHERE project_path = ? 
         ORDER BY timestamp DESC
         LIMIT 5
-        """
-        (get_project_path())
+        """,
+        (get_project_path(),)
     )
     rows = cursor.fetchall()
     conn.close()
