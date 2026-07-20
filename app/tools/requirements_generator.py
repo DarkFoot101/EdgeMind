@@ -51,12 +51,6 @@ def extract_imports(project_path="."):
                             alias.name.split(".")[0]
                         )
 
-                    filtered_imports = [
-                        pkg
-                        for pkg in imports
-                        if pkg not in STDLIB
-                    ]
-
                 elif isinstance(
                     node,
                     ast.ImportFrom
@@ -67,15 +61,15 @@ def extract_imports(project_path="."):
                         imports.add(
                             node.module.split(".")[0]
                         )
-                    
-                    filtered_imports = [
-                        pkg
-                        for pkg in imports
-                        if pkg not in STDLIB
-                    ]
 
         except Exception:
             continue
+
+    filtered_imports = [
+        pkg
+        for pkg in imports
+        if pkg not in STDLIB
+    ]
 
     return sorted(filtered_imports)
 
@@ -85,10 +79,8 @@ def save_requirements(project_path="."):
         project_path
     )
 
-    with open(
-        "requirements-1.txt",
-        "w"
-    ) as f:
+    output_path = Path(project_path) / "requirements.txt"
+    with open(output_path, "w") as f:
 
         for package in imports:
             f.write(f"{package}\n")

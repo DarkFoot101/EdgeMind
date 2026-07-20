@@ -1,4 +1,4 @@
-from pathlib import Path 
+from pathlib import Path
 
 IGNORE_DIRS = {
     "venv",
@@ -8,8 +8,8 @@ IGNORE_DIRS = {
     "node_modules"
 }
 
-def scan_project(project_path : "."):
-    project = Path(project_path) 
+def scan_project(project_path="."):   # was (project_path : ".") — invalid syntax
+    project = Path(project_path)
 
     python_files = []
 

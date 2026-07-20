@@ -1,6 +1,10 @@
 app
+dataclasses
+difflib
 langgraph
 logging
 ollama
 psutil
+shutil
+sqlite3
 typer

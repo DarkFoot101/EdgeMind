@@ -29,5 +29,5 @@ def initialize_database():
             success BOOLEAN
         );
         """)
-    conn.connect()
+    conn.commit()
     conn.close()

@@ -1,3 +1,4 @@
+from pathlib import Path
 from app.tools.code_scanner import scan_project
 from app.models.model_router import select_model
 from app.models.ollama_client import generate_response
@@ -40,7 +41,8 @@ def save_dockerfile(project_path="."):
 
     dockerfile_content = generate_dockerfile(project_path)
 
-    with open("Dockerfile", "w") as f:
+    output_path = Path(project_path) / "Dockerfile"
+    with open(output_path, "w") as f:
         f.write(dockerfile_content)
 
     return "Dockerfile generated successfully."

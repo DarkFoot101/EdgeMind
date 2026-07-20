@@ -52,7 +52,11 @@ def route_model(state):
 def execute_task(state):
     task = state["current_task"]
 
-    if task == "analyze":
+    if task == "Use memory context":
+        state["result"] = "Used memory context."
+        return state
+
+    elif task == "analyze":
         report = analyze_project(".")
         state["result"] = report["analysis"]
         return state
@@ -162,7 +166,7 @@ def memory_lookup(state):
         return state 
     
     context = ""
-    for query, task, result in rows:
+    for query, task, result, success in rows:
         context += (
             f"Previous Query: {query}"
             f"Task: {task}"

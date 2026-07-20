@@ -4,7 +4,7 @@ from app.models.model_router import select_model
 from app.models.ollama_client import generate_response
 
 
-def explain_code(file_path: str , selected_model: str):
+def explain_code(file_path: str , selected_model: str = "qwen2.5-coder:3b"):
 
     file = Path(file_path)
 

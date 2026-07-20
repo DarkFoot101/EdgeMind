@@ -28,7 +28,7 @@ def validate_python(code : str):
         )
     
     try:
-        ast.parse(str)
+        ast.parse(code)
     except SyntaxError as e:
         return (
             False, 

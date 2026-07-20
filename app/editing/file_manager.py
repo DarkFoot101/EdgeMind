@@ -48,14 +48,23 @@ def read_file(file_path: str) -> str:
 
 def backup_file(file_path: str) -> str:
     """
-    Save a backup inside .edgemind/backups.
+    Save a backup inside .edgemind/backups, preserving the full
+    relative path structure to avoid filename collisions.
     """
 
     ensure_backup_directory()
 
-    file = Path(file_path)
+    file = Path(file_path).resolve()
 
-    backup_path = BACKUP_DIR / file.name
+    # Recreate the full directory structure under BACKUP_DIR
+    # e.g. src/utils.py -> .edgemind/backups/src/utils.py
+    relative = Path(file_path)
+    backup_path = BACKUP_DIR / relative
+
+    backup_path.parent.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
     shutil.copy(
         file,
@@ -86,7 +95,8 @@ def restore_backup(file_path: str):
 
     file = Path(file_path)
 
-    backup = BACKUP_DIR / file.name
+    # Mirror the same path structure used in backup_file
+    backup = BACKUP_DIR / file
 
     if not backup.exists():
         raise FileNotFoundError(
