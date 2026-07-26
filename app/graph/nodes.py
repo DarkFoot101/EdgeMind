@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from app.models.model_router import select_model
+from app.editing.editing_service import EditingService
+from app.editing.models import EditRequest
 from app.tools.project_analyzer import analyze_project
 from app.tools.code_explainer import explain_code
 from app.tools.debug_assistant import debug_error
@@ -77,6 +79,21 @@ def execute_task(state):
         if task == "debug":
             error_text = Path(state["file_path"]).read_text(encoding="utf-8")
             state["result"] = debug_error(error_text, state["selected_model"])
+            return state
+
+        if task == "edit":
+            response = EditingService().prepare_edit(
+                EditRequest(
+                    file_path=state["file_path"],
+                    instruction=state["user_query"],
+                    model=state["selected_model"],
+                )
+            )
+            state["edit_response"] = response
+            if not response.success:
+                state["result"] = f"Error: edit preparation failed: {response.error}"
+                return state
+            state["result"] = response.diff or "Edit preview prepared with no changes."
             return state
 
         if task == "deployment":

@@ -28,4 +28,7 @@ def select_model(task: str) -> str:
     elif task == "explain":
         return "qwen2.5-coder:3b"
 
+    elif task == "edit":
+        return "qwen2.5-coder:3b"
+
     return "phi3:mini"

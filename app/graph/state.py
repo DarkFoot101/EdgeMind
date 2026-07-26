@@ -1,5 +1,7 @@
 from typing import TypedDict
 
+from app.editing.models import EditResponse
+
 
 class EdgeMindState(TypedDict):
 
@@ -22,3 +24,5 @@ class EdgeMindState(TypedDict):
     execution_success: bool
 
     memory_context: str
+
+    edit_response: EditResponse | None

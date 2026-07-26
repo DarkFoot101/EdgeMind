@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from app.graph.workflow import workflow
+from app.editing.models import EditResponse
 from app.memory.memory_manager import save_execution, search_memory
 
 
@@ -90,3 +91,38 @@ class WorkflowTests(unittest.TestCase):
 
         self.assertNotIn("Use memory context", tasks)
         self.assertEqual(tasks.count("analyze"), 2)
+
+    def test_edit_prepares_a_preview_without_applying_it(self) -> None:
+        response = EditResponse(
+            success=True,
+            file_path="module.py",
+            original_code="value = 1\n",
+            modified_code="value = 2\n",
+            diff="--- module.py (original)\n+++ module.py (modified)\n",
+            validation_message="Validation Passed",
+            backup_path=".edgemind/backups/module.py",
+            error=None,
+        )
+        with TemporaryDirectory() as directory:
+            project = Path(directory).resolve()
+            target = project / "module.py"
+            target.write_text(response.original_code, encoding="utf-8")
+            previous_directory = Path.cwd()
+            try:
+                os.chdir(project)
+                with patch("app.graph.nodes.EditingService") as service:
+                    service.return_value.prepare_edit.return_value = response
+                    result = workflow.invoke(
+                        {
+                            "user_query": "Edit this file to set value to two",
+                            "project_path": str(project),
+                            "file_path": "module.py",
+                        }
+                    )
+            finally:
+                os.chdir(previous_directory)
+
+            self.assertTrue(result["execution_success"])
+            self.assertIs(result["edit_response"], response)
+            self.assertIn("+++ module.py", result["result"])
+            self.assertEqual(target.read_text(encoding="utf-8"), response.original_code)

@@ -21,6 +21,14 @@ def create_plan(user_query : str, memory : str = ""):
         plan.append("debug")
 
     if (
+        "edit" in query
+        or "modify" in query
+        or "refactor" in query
+        or "change code" in query
+    ):
+        plan.append("edit")
+
+    if (
         "docker" in query
         or "deployment" in query
         or "deploy" in query
