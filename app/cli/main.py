@@ -14,13 +14,31 @@ app = typer.Typer(
 )
 
 
+def _project_path(project_path: str) -> str:
+    """Validate and normalize a project directory argument."""
+
+    path = Path(project_path).expanduser()
+    if not path.is_dir():
+        raise typer.BadParameter("Project path must be an existing directory.")
+    return str(path.resolve())
+
+
+def _file_path(file_path: str) -> Path:
+    """Validate and normalize a source or error-log file argument."""
+
+    path = Path(file_path).expanduser()
+    if not path.is_file():
+        raise typer.BadParameter("File path must be an existing file.")
+    return path.resolve()
+
+
 @app.command()
-def analyze(project_path: str = "."):
+def analyze(project_path: str = ".") -> None:
     """
     Analyze an entire project.
     """
 
-    report = analyze_project(project_path)
+    report = analyze_project(_project_path(project_path))
 
     print("\n========================")
     print("PROJECT ANALYSIS REPORT")
@@ -40,12 +58,12 @@ def analyze(project_path: str = "."):
 
 
 @app.command()
-def explain(file_path: str):
+def explain(file_path: str) -> None:
     """
     Explain a source code file.
     """
 
-    result = explain_code(file_path)
+    result = explain_code(str(_file_path(file_path)))
 
     print("\n========================")
     print("CODE EXPLANATION")
@@ -55,12 +73,12 @@ def explain(file_path: str):
 
 
 @app.command()
-def debug(error_file: str):
+def debug(error_file: str) -> None:
     """
     Analyze an error log or traceback.
     """
 
-    error_text = Path(error_file).read_text()
+    error_text = _file_path(error_file).read_text(encoding="utf-8")
 
     result = debug_error(error_text)
 
@@ -72,16 +90,16 @@ def debug(error_file: str):
 
 
 @app.command()
-def generate_docker():
+def generate_docker(project_path: str = ".") -> None:
 
-    result = save_dockerfile(".")
+    result = save_dockerfile(_project_path(project_path))
     print(result)
 
 
 @app.command()
-def generate_requirements():
+def generate_requirements(project_path: str = ".") -> None:
 
-    packages = save_requirements(".")
+    packages = save_requirements(_project_path(project_path))
 
     print(
         f"Generated requirements.txt "
@@ -90,9 +108,9 @@ def generate_requirements():
 
 
 @app.command()
-def generate_compose():
+def generate_compose(project_path: str = ".") -> None:
 
-    result = save_docker_compose(".")
+    result = save_docker_compose(_project_path(project_path))
     print(result)
 
 

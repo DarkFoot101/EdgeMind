@@ -2,12 +2,10 @@ import os
 from pathlib import Path
 import logging
 
-logging.basicConfig(level=logging.INFO)
-
-project_name="EdgeMind"
+logger = logging.getLogger(__name__)
 
 list_of_files = [
-    f"app/config.py"
+    "app/config.py",
     f"app/agents/coding_agent.py",
     f"app/models/model_router.py",
     f"app/models/ollama_client.py",
@@ -26,21 +24,24 @@ list_of_files = [
     ".env"
 ]
 
-for filepath in list_of_files:
-    filepath = Path(filepath)
-    filedir, filename = os.path.split(filepath)
+def main() -> None:
+    """Create the initial EdgeMind project structure when run directly."""
 
-    if filedir != "":
-        os.makedirs(filedir, exist_ok=True)
-        logging.info(f"Creating directory:{filedir} for the file {filename}")
+    logging.basicConfig(level=logging.INFO)
+    for filepath in list_of_files:
+        filepath = Path(filepath)
+        filedir, filename = os.path.split(filepath)
 
-    
-    if (not os.path.exists(filepath)) or (os.path.getsize(filepath) == 0):
-        with open(filepath,'w') as f:
-            pass
-            logging.info(f"Creating empty file: {filepath}")
+        if filedir:
+            os.makedirs(filedir, exist_ok=True)
+            logger.info("Creating directory: %s for file %s", filedir, filename)
+
+        if not filepath.exists() or filepath.stat().st_size == 0:
+            filepath.touch(exist_ok=True)
+            logger.info("Creating empty file: %s", filepath)
+        else:
+            logger.info("%s already exists", filename)
 
 
-    
-    else:
-        logging.info(f"{filename} is already exists")
+if __name__ == "__main__":
+    main()

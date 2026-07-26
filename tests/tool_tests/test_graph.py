@@ -1,23 +1,13 @@
-# test_graph.py
+import unittest
 
-from app.graph.workflow import workflow
+from app.graph.evaluator import evaluate_execution
+from app.graph.planner import create_plan
 
-# result = workflow.invoke(
-#     {
-#         "user_query":
-#             "explain this file",
 
-#         "file_path":
-#             "app/models/model_router.py"
-#     }
-# )
-result = workflow.invoke(
-    {
-        "user_query":
-            "analyze project",
+class GraphUnitTests(unittest.TestCase):
+    def test_planner_builds_a_deployment_plan(self) -> None:
+        self.assertEqual(create_plan("Generate Docker Compose"), ["deployment"])
 
-        "file_path":
-            ""
-    }
-)
-print(result["result"])
+    def test_evaluator_accepts_successful_error_related_language(self) -> None:
+        self.assertTrue(evaluate_execution("No errors were found."))
+        self.assertFalse(evaluate_execution("Error: source file is missing"))

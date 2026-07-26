@@ -1,24 +1,33 @@
 import ast
+import sys
 from pathlib import Path
 
-STDLIB = {
-    "os",
-    "sys",
-    "json",
-    "time",
-    "pathlib",
-    "typing",
-    "ast",
-    "re",
-    "collections",
-    "datetime"
-}
+STDLIB = set(sys.stdlib_module_names)
 
-def extract_imports(project_path="."):
+
+def _local_module_names(project: Path) -> set[str]:
+    """Return import roots provided by the project itself."""
+
+    return {
+        path.stem
+        for path in project.iterdir()
+        if path.suffix == ".py"
+    } | {
+        path.name
+        for path in project.iterdir()
+        if path.is_dir() and (path / "__init__.py").exists()
+    }
+
+
+def extract_imports(project_path: str = ".") -> list[str]:
+    """Extract third-party import roots from Python files in a project."""
 
     imports = set()
-    
-    project = Path(project_path)
+    project = Path(project_path).resolve()
+    if not project.is_dir():
+        raise NotADirectoryError(project)
+
+    local_modules = _local_module_names(project)
 
     for py_file in project.rglob("*.py"):
 
@@ -62,27 +71,28 @@ def extract_imports(project_path="."):
                             node.module.split(".")[0]
                         )
 
-        except Exception:
+        except (OSError, SyntaxError, UnicodeDecodeError):
             continue
 
     filtered_imports = [
         pkg
         for pkg in imports
-        if pkg not in STDLIB
+        if pkg not in STDLIB and pkg not in local_modules
     ]
 
     return sorted(filtered_imports)
 
-def save_requirements(project_path="."):
+def save_requirements(project_path: str = ".") -> list[str]:
+    """Write discovered third-party imports to ``requirements.txt``."""
 
     imports = extract_imports(
         project_path
     )
 
     output_path = Path(project_path) / "requirements.txt"
-    with open(output_path, "w") as f:
+    with output_path.open("w", encoding="utf-8") as file:
 
         for package in imports:
-            f.write(f"{package}\n")
+            file.write(f"{package}\n")
 
     return imports

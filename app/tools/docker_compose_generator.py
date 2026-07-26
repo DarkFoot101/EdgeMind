@@ -4,7 +4,7 @@ from app.models.model_router import select_model
 from app.models.ollama_client import generate_response
 
 
-def clean_llm_output(text):
+def clean_llm_output(text: str) -> str:
 
     text = text.replace("```yaml", "")
     text = text.replace("```yml", "")
@@ -13,11 +13,14 @@ def clean_llm_output(text):
     return text.strip()
 
 
-def generate_docker_compose(project_path="."):
+def generate_docker_compose(
+    project_path: str = ".",
+    selected_model: str | None = None,
+) -> str:
 
     project_info = scan_project(project_path)
 
-    model = select_model("deployment")
+    model = selected_model or select_model("deployment")
 
     prompt = f"""
         You are a Senior DevOps Engineer.
@@ -32,7 +35,7 @@ def generate_docker_compose(project_path="."):
         1. Assume Dockerfile already exists.
         2. Create one service called edgemind.
         3. Build from current directory.
-        4. Use restart unless-stopped.
+        4. Do not configure a restart policy; EdgeMind is a command-line app.
         5. Return ONLY YAML.
         6. No explanation.
 
@@ -48,14 +51,20 @@ def generate_docker_compose(project_path="."):
     return clean_llm_output(response)
 
 
-def save_docker_compose(project_path="."):
+def save_docker_compose(
+    project_path: str = ".",
+    selected_model: str | None = None,
+) -> str:
+    """Generate and save a non-empty Compose file for a project."""
 
     compose_content = generate_docker_compose(
-        project_path
+        project_path,
+        selected_model,
     )
+    if not compose_content.strip():
+        raise ValueError("Model returned an empty docker-compose.yml file.")
 
     output_path = Path(project_path) / "docker-compose.yml"
-    with open(output_path, "w") as f:
-        f.write(compose_content)
+    output_path.write_text(compose_content, encoding="utf-8")
 
     return "docker-compose.yml generated successfully."

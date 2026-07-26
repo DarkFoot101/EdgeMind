@@ -18,7 +18,6 @@ prepare_edit().
 File modifications only occur after explicit approval.
 """
 
-from app.tools import requirements_generator
 from pathlib import Path
 from app.editing.models import (
     EditRequest,
@@ -51,6 +50,9 @@ class EditingService:
         """
 
         try:
+            if request.language.lower() != "python":
+                raise ValueError("Only Python edits are currently supported.")
+
             # ----------------------------
             # Read Original Source
             # ----------------------------
@@ -88,6 +90,7 @@ class EditingService:
                 if not success:
                     return EditResponse(
                         success=False,
+                        file_path=request.file_path,
                         original_code=original_code,
                         modified_code=modified_code,
                         diff="",
@@ -111,6 +114,7 @@ class EditingService:
 
             return EditResponse(
                 success=True,
+                file_path=request.file_path,
                 original_code=original_code,
                 modified_code=modified_code,
                 diff=diff,
@@ -119,15 +123,16 @@ class EditingService:
                 error=None,
             )
 
-        except Exception as e:
+        except Exception as exc:
             return EditResponse(
                 success=False,
+                file_path=request.file_path,
                 original_code="",
                 modified_code="",
                 diff="",
                 validation_message="Preparation Failed",
                 backup_path=None,
-                error=str(e),
+                error=f"{type(exc).__name__}: {exc}",
             )
 
     def apply_edit(
@@ -140,6 +145,8 @@ class EditingService:
         """
         if not response.success:
             return False
+        if Path(file_path).resolve() != Path(response.file_path).resolve():
+            raise ValueError("An edit may only be applied to the file it previewed.")
         write_file(
             file_path,
             response.modified_code,
@@ -158,5 +165,5 @@ class EditingService:
                 file_path
             )
             return True
-        except Exception:
+        except (FileNotFoundError, OSError, ValueError):
             return False

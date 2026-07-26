@@ -1,9 +1,5 @@
-version: '3'
 services:
   edgemind:
     build: .
-    restart: unless-stopped
-    environment: []
-    volumes: []
-    depends_on: []
-    networks: {}
+    command: ["--help"]
+    restart: "no"

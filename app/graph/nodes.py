@@ -1,14 +1,15 @@
-from app.tools.docker_compose_generator import save_docker_compose
+from pathlib import Path
+
 from app.models.model_router import select_model
 from app.tools.project_analyzer import analyze_project
 from app.tools.code_explainer import explain_code
 from app.tools.debug_assistant import debug_error
-from app.tools.deployment_generator import generate_dockerfile, save_dockerfile
+from app.tools.deployment_generator import save_dockerfile
 from app.tools.requirements_generator import save_requirements
-from app.tools.docker_compose_generator import generate_docker_compose, save_docker_compose
+from app.tools.docker_compose_generator import save_docker_compose
 from app.graph.evaluator import evaluate_execution
 from app.graph.planner import create_plan
-from app.memory.memory_manager import save_execution, get_recent_history, search_memory
+from app.memory.memory_manager import save_execution, search_memory
 
 
 # # classifier node functionality
@@ -32,83 +33,74 @@ from app.memory.memory_manager import save_execution, get_recent_history, search
 #     state["task_type"] = task
 #     return state
 
-# getting the current task
 def get_current_task(state):
-    print("task node", state)
+    """Load the execution-plan item selected by ``current_step``."""
+
     state["current_task"] = state["plan"][
         state["current_step"]
     ]
 
     return state
 
-# router node functionality
 def route_model(state):
+    """Select the local model for the active task."""
+
     task = state["current_task"]
     model = select_model(task)
     state["selected_model"] = model
     return state
 
-# test node functionality
 def execute_task(state):
+    """Execute one planned task and record its textual result."""
+
     task = state["current_task"]
+    project_path = state.get("project_path", ".")
 
-    if task == "Use memory context":
-        state["result"] = "Used memory context."
-        return state
+    try:
+        if task == "Use memory context":
+            state["result"] = "Used memory context."
+            return state
 
-    elif task == "analyze":
-        report = analyze_project(".")
-        state["result"] = report["analysis"]
-        return state
+        if task == "analyze":
+            report = analyze_project(project_path, state["selected_model"])
+            state["result"] = report["analysis"]
+            return state
 
-    # Execute the explanation using the model selected by the LangGraph routing stage.
-    elif task == "explain":
-        file_path = state["file_path"]
-        result = explain_code(file_path , selected_model = state["selected_model"])
-        state["result"] = result
-        return state
-
-    elif task == "debug":
-        file_path = state["file_path"]
-        with open(file_path) as f:
-            error_text = f.read()
-
-        result = debug_error(error_text)
-        state["result"] = result
-        return state    
-
-    elif task == "deployment":
-        query = state["user_query"].lower()
-
-        if "docker" in query:
-            result = save_dockerfile(".")
-            state["result"] = result
-            return state 
-        elif "requirements" in query:
-            packages = save_requirements(".")
-            state["result"] = (
-                f"Generated requirements.txt "
-                f"with {len(packages)} packages."
+        if task == "explain":
+            result = explain_code(
+                state["file_path"],
+                selected_model=state["selected_model"],
             )
-            return state
-
-        elif "compose" in query:
-            result = save_docker_compose(".")
             state["result"] = result
             return state
-        
-        # if no state has been called we can simply return the previous statements
-        state["result"] = (
-            "Deployment task detected but "
-            "no deployment type specified."
-        )
 
+        if task == "debug":
+            error_text = Path(state["file_path"]).read_text(encoding="utf-8")
+            state["result"] = debug_error(error_text, state["selected_model"])
+            return state
+
+        if task == "deployment":
+            query = state["user_query"].lower()
+            if "compose" in query:
+                state["result"] = save_docker_compose(project_path, state["selected_model"])
+            elif "requirements" in query:
+                packages = save_requirements(project_path)
+                state["result"] = f"Generated requirements.txt with {len(packages)} packages."
+            elif "docker" in query:
+                state["result"] = save_dockerfile(project_path, state["selected_model"])
+            else:
+                state["result"] = "Deployment task detected but no deployment type specified."
+            return state
+
+        state["result"] = f"Error: unsupported task '{task}'."
+        return state
+    except Exception as exc:
+        state["result"] = f"Error: {type(exc).__name__}: {exc}"
         return state
 
 
-# planner node
 def planner_node(state):
-    print("planner before", state)
+    """Create the ordered execution plan for the current request."""
 
     plan = create_plan(
         user_query = state["user_query"],
@@ -117,8 +109,6 @@ def planner_node(state):
     state["plan"] = plan 
     state["current_step"] = 0
     state["current_task"] = plan[0]
-
-    print("planenr after", state)
 
     return state
 
@@ -133,8 +123,9 @@ def advance_step(state):
 
     return state
 
-# this makes the agent to take an advance step while planning goes on 
 def should_continue(state):
+    """Route to the next plan item only after a successful task."""
+
     if not state["execution_success"]:
         return "finish"
     if state["current_step"] >= len(state["plan"]):
@@ -142,22 +133,24 @@ def should_continue(state):
 
     return "continue"
 
-# evaluation of the agent to see if finished the task or not
 def evaluate_task(state):
+    """Evaluate the result produced by the active task."""
+
     success = evaluate_execution(
         state["result"]
     )
     state["execution_success"] = success
     return state
 
-# new node to save up the memory 
 def memory_update(state):
-    save_execution(state)
+    """Persist the completed task as project memory."""
+
+    if state["current_task"] != "Use memory context":
+        save_execution(state)
     return state 
 
-# memory lookup node for the agent to use the memory 
 def memory_lookup(state):
-    """Search previously executed task before planning"""
+    """Load bounded project memory before planning."""
     rows = search_memory(
         state.get("project_path", ".")
     )
@@ -165,14 +158,17 @@ def memory_lookup(state):
         state["memory_context"] = ""
         return state 
     
-    context = ""
+    context_parts = []
     for query, task, result, success in rows:
-        context += (
-            f"Previous Query: {query}"
-            f"Task: {task}"
-            f"Result: {result}"
-            "\n"
+        context_parts.append(
+            "\n".join(
+                (
+                    f"Previous Query: {query}",
+                    f"Task: {task}",
+                    f"Succeeded: {bool(success)}",
+                    f"Result: {result[:4000]}",
+                )
+            )
         )
-    state['memory_context'] = context
+    state["memory_context"] = "\n\n".join(context_parts)
     return state 
-

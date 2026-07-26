@@ -4,11 +4,14 @@ from app.models.model_router import select_model
 from app.models.ollama_client import generate_response
 
 
-def generate_dockerfile(project_path="."):
+def generate_dockerfile(
+    project_path: str = ".",
+    selected_model: str | None = None,
+) -> str:
 
     project_info = scan_project(project_path)
 
-    model = select_model("deployment")
+    model = selected_model or select_model("deployment")
 
     prompt = f"""
         You are a Senior DevOps Engineer.
@@ -37,17 +40,22 @@ def generate_dockerfile(project_path="."):
 
     return clean_llm_output(dockerfile_content)
 
-def save_dockerfile(project_path="."):
+def save_dockerfile(
+    project_path: str = ".",
+    selected_model: str | None = None,
+) -> str:
+    """Generate and save a non-empty Dockerfile for a project."""
 
-    dockerfile_content = generate_dockerfile(project_path)
+    dockerfile_content = generate_dockerfile(project_path, selected_model)
+    if not dockerfile_content.strip():
+        raise ValueError("Model returned an empty Dockerfile.")
 
     output_path = Path(project_path) / "Dockerfile"
-    with open(output_path, "w") as f:
-        f.write(dockerfile_content)
+    output_path.write_text(dockerfile_content, encoding="utf-8")
 
     return "Dockerfile generated successfully."
 
-def clean_llm_output(text):
+def clean_llm_output(text: str) -> str:
 
     text = text.replace("```dockerfile", "")
     text = text.replace("```", "")

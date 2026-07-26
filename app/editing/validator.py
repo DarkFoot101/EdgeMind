@@ -8,7 +8,8 @@ allowing it to overwrite existing files.
 
 import ast
 
-def validate_python(code : str):
+
+def validate_python(code: str) -> tuple[bool, str]:
     """
     Check whether generated code is valid Python.
 

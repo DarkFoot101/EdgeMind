@@ -1,23 +1,20 @@
-def evaluate_execution(result: str):
-    """Evaluate if the execution was successful. """
+"""Execution-result evaluation for the graph."""
+
+
+def evaluate_execution(result: object) -> bool:
+    """Return whether a task produced a non-empty, non-error result."""
 
     if result is None:
-        return False 
-    
+        return False
+
     if not result:
         return False
 
     if isinstance(result, str):
-        if result.strip() == "":
+        normalized = result.strip().lower()
+        if not normalized:
             return False
-        
-        if "error" in result.lower():
-            return False
-        
-        if "exception" in result.lower():
-            return False
-
-        if "traceback" in result.lower():
+        if normalized.startswith(("error:", "exception:", "traceback")):
             return False
 
     return True

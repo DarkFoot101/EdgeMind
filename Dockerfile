@@ -1,21 +1,15 @@
 Dockerfile
-# Use an official lightweight Python runtime as a parent image
 FROM python:3.11-slim
 
-# Set the working directory in the container to /app
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
 COPY requirements.txt .
-
-# Install any dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Make port 80 available for connections
-EXPOSE 80
+COPY app ./app
 
-# Define environment variable
-ENV NAME World
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
 
-# Run app.py when the container launches
-CMD ["python", "app.py"]
+ENTRYPOINT ["python", "-m", "app.cli.main"]
+CMD ["--help"]

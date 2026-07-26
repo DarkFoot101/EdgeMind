@@ -1,10 +1,4 @@
-uv
-pathlib
 langgraph
-langchain
 ollama
 psutil
-typ
-rich
-pydantic
-python-dotenv
+typer

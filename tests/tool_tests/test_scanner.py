@@ -1,13 +1,19 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import unittest
+
 from app.tools.code_scanner import scan_project
-from app.resources.system_monitor import get_system_resources
 
-result = scan_project(".")
 
-system_resources = get_system_resources()
+class ScannerTests(unittest.TestCase):
+    def test_scans_python_files_and_ignores_virtual_environments(self) -> None:
+        with TemporaryDirectory() as directory:
+            project = Path(directory)
+            (project / "app.py").write_text("pass\n", encoding="utf-8")
+            (project / "venv").mkdir()
+            (project / "venv" / "ignored.py").write_text("pass\n", encoding="utf-8")
 
-combined_data = {
-    "project_analysis" : result,
-    "system_info" : system_resources
-}
+            result = scan_project(str(project))
 
-print(combined_data)
+        self.assertEqual(result["python_files"], 1)
+        self.assertEqual(result["total_files"], 1)

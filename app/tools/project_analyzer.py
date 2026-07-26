@@ -4,7 +4,11 @@ from app.models.model_router import select_model
 from app.models.ollama_client import generate_response
 
 
-def analyze_project(project_path="."):
+def analyze_project(
+    project_path: str = ".",
+    selected_model: str | None = None,
+) -> dict:
+    """Analyze project metadata with the selected local model."""
 
     # Step 1
     project_info = scan_project(project_path)
@@ -13,7 +17,7 @@ def analyze_project(project_path="."):
     resources = get_system_resources()
 
     # Step 3
-    selected_model = select_model("simple")
+    model = selected_model or select_model("analyze")
 
     # Step 4
     prompt = f"""
@@ -55,14 +59,14 @@ def analyze_project(project_path="."):
     # Step 5
     ai_analysis = generate_response(
         prompt=prompt,
-        model=selected_model
+        model=model
     )
 
     # Step 6
     report = {
         "project_info": project_info,
         "resources": resources,
-        "selected_model": selected_model,
+        "selected_model": model,
         "analysis": ai_analysis
     }
 

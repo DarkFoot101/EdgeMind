@@ -1,83 +1,74 @@
-# this manages the memory inside the database 
+"""Persistence and retrieval of project execution memory."""
 
-from app.memory.database import get_connection, get_project_path 
+from contextlib import closing
+from typing import Any
 
-# this is the code to write into the database 
-def save_execution(state):
-    conn = get_connection()
-    cursor = conn.cursor() 
+from app.memory.database import get_connection, get_project_path
+from app.memory.schema import initialize_database
 
-    cursor.execute(
-        """
-        INSERT INTO task_history
-        (   
-            project_path,
-            user_query,
-            task,
-            file_path,
-            selected_model,
-            result,
-            success
+
+def save_execution(state: dict[str, Any]) -> None:
+    """Persist one completed task for the project that ran it."""
+
+    initialize_database()
+    with closing(get_connection()) as connection, connection:
+        connection.execute(
+            """
+            INSERT INTO task_history
+            (
+                project_path,
+                user_query,
+                task,
+                file_path,
+                selected_model,
+                result,
+                success
+            )
+
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                get_project_path(state.get("project_path", ".")),
+                state["user_query"],
+                state["current_task"],
+                state.get("file_path", ""),
+                state["selected_model"],
+                state["result"],
+                state["execution_success"],
+            ),
         )
 
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            get_project_path(),
-            state["user_query"],
-            state["current_task"],
-            state["file_path"],
-            state["selected_model"],
-            state["result"],
-            state["execution_success"]
-        )
-    )
-    
-    conn.commit()
-    conn.close()
 
-# this is the retireval code
-def get_recent_history(limit = 5):
-    conn = get_connection()
-    cursor = conn.cursor()
+def get_recent_history(limit: int = 5) -> list[tuple[str, str, str, bool]]:
+    """Return the most recent execution records across all projects."""
 
-    cursor.execute(
-        """
-        SELECT 
-            user_query,
-            task,
-            result, 
-            success
-        FROM task_history 
-        ORDER BY id DESC
+    if limit < 1:
+        raise ValueError("History limit must be at least 1.")
+    initialize_database()
+    with closing(get_connection()) as connection:
+        return connection.execute(
+            """
+            SELECT user_query, task, result, success
+            FROM task_history
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
 
-        LIMIT ?
-        """,
-        (limit,)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return rows 
 
-def search_memory(user_query : str):
-    """Retrieve the previously executed task """
-    conn = get_connection()
-    cursor = conn.cursor()
+def search_memory(project_path: str = ".") -> list[tuple[str, str, str, bool]]:
+    """Retrieve the latest execution records for one project."""
 
-    cursor.execute(
-        """
-        SELECT 
-            user_query,
-            task,
-            result,
-            success
-        FROM task_history 
-        WHERE project_path = ? 
-        ORDER BY timestamp DESC
-        LIMIT 5
-        """,
-        (get_project_path(),)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return rows
+    initialize_database()
+    with closing(get_connection()) as connection:
+        return connection.execute(
+            """
+            SELECT user_query, task, result, success
+            FROM task_history
+            WHERE project_path = ?
+            ORDER BY id DESC
+            LIMIT 5
+            """,
+            (get_project_path(project_path),),
+        ).fetchall()

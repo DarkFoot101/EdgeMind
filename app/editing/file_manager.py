@@ -14,13 +14,32 @@ No AI logic should exist in this module.
 """
 
 from pathlib import Path
+import os
 import shutil
+import tempfile
 
 
 BACKUP_DIR = Path(".edgemind/backups")
 
 
-def ensure_backup_directory():
+def _resolve_project_file(file_path: str) -> Path:
+    """Resolve an existing file and ensure it belongs to this project."""
+
+    project_root = Path.cwd().resolve()
+    file = Path(file_path).expanduser().resolve()
+    try:
+        file.relative_to(project_root)
+    except ValueError as exc:
+        raise ValueError("File path must be inside the current project.") from exc
+
+    if not file.exists():
+        raise FileNotFoundError(file)
+    if not file.is_file():
+        raise IsADirectoryError(file)
+    return file
+
+
+def ensure_backup_directory() -> Path:
     """
     Create the backup directory if it does not exist.
     """
@@ -29,6 +48,7 @@ def ensure_backup_directory():
         parents=True,
         exist_ok=True
     )
+    return BACKUP_DIR.resolve()
 
 
 def read_file(file_path: str) -> str:
@@ -36,11 +56,7 @@ def read_file(file_path: str) -> str:
     Read the contents of a file.
     """
 
-    file = Path(file_path)
-
-    if not file.exists():
-        raise FileNotFoundError(file)
-
+    file = _resolve_project_file(file_path)
     return file.read_text(
         encoding="utf-8"
     )
@@ -52,21 +68,17 @@ def backup_file(file_path: str) -> str:
     relative path structure to avoid filename collisions.
     """
 
-    ensure_backup_directory()
-
-    file = Path(file_path).resolve()
-
-    # Recreate the full directory structure under BACKUP_DIR
-    # e.g. src/utils.py -> .edgemind/backups/src/utils.py
-    relative = Path(file_path)
-    backup_path = BACKUP_DIR / relative
+    backup_root = ensure_backup_directory()
+    file = _resolve_project_file(file_path)
+    relative = file.relative_to(Path.cwd().resolve())
+    backup_path = backup_root / relative
 
     backup_path.parent.mkdir(
         parents=True,
         exist_ok=True
     )
 
-    shutil.copy(
+    shutil.copy2(
         file,
         backup_path
     )
@@ -77,33 +89,41 @@ def backup_file(file_path: str) -> str:
 def write_file(
     file_path: str,
     content: str
-):
+) -> None:
     """
     Overwrite a source file.
     """
 
-    Path(file_path).write_text(
-        content,
-        encoding="utf-8"
-    )
+    file = _resolve_project_file(file_path)
+    original_mode = file.stat().st_mode
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=file.parent,
+            delete=False,
+        ) as temporary_file:
+            temporary_file.write(content)
+            temporary_path = Path(temporary_file.name)
+        os.chmod(temporary_path, original_mode)
+        temporary_path.replace(file)
+    finally:
+        if temporary_path and temporary_path.exists():
+            temporary_path.unlink()
 
 
-def restore_backup(file_path: str):
+def restore_backup(file_path: str) -> None:
     """
     Restore a file from backup.
     """
 
-    file = Path(file_path)
-
-    # Mirror the same path structure used in backup_file
-    backup = BACKUP_DIR / file
+    file = _resolve_project_file(file_path)
+    backup = BACKUP_DIR.resolve() / file.relative_to(Path.cwd().resolve())
 
     if not backup.exists():
         raise FileNotFoundError(
             "Backup not found."
         )
 
-    shutil.copy(
-        backup,
-        file
-    )
+    write_file(str(file), backup.read_text(encoding="utf-8"))
