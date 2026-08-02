@@ -53,35 +53,80 @@ def route_model(state):
     return state
 
 def execute_task(state):
-    """Execute one planned task and record its textual result."""
+    """
+    Execute the current task.
+
+    This node performs exactly one task from the execution plan.
+    On success:
+        - execution_success = True
+        - retry_count is reset
+    On failure:
+        - execution_success = False
+        - retry_count is NOT modified
+          (handled by retry_node)
+    """
 
     task = state["current_task"]
     project_path = state.get("project_path", ".")
-
+    
     try:
+        # --------------------------------------------------
+        # Memory Context
+        # --------------------------------------------------
         if task == "Use memory context":
-            state["result"] = "Used memory context."
+            state["result"] = "Using previous project memory."
+            state["execution_success"] = True
+            state["retry_count"] = 0
             return state
 
-        if task == "analyze":
-            report = analyze_project(project_path, state["selected_model"])
-            state["result"] = report["analysis"]
-            return state
-
-        if task == "explain":
-            result = explain_code(
-                state["file_path"],
-                selected_model=state["selected_model"],
+        # --------------------------------------------------
+        # Project Analysis
+        # --------------------------------------------------
+        elif task == "analyze":
+            report = analyze_project(
+                project_path,
+                state["selected_model"]
             )
-            state["result"] = result
+            state["result"] = report["analysis"]
+            state["execution_success"] = True
+            state["retry_count"] = 0
             return state
 
-        if task == "debug":
-            error_text = Path(state["file_path"]).read_text(encoding="utf-8")
-            state["result"] = debug_error(error_text, state["selected_model"])
+        # --------------------------------------------------
+        # Code Explanation
+        # --------------------------------------------------
+        elif task == "explain":
+            state["result"] = explain_code(
+                state["file_path"],
+                selected_model=state["selected_model"]
+            )
+            state["execution_success"] = True
+            state["retry_count"] = 0
             return state
 
-        if task == "edit":
+        # --------------------------------------------------
+        # Debug Assistant
+        # --------------------------------------------------
+        elif task == "debug":
+            error_text = Path(
+                state["file_path"]
+            ).read_text(
+                encoding="utf-8"
+            )
+
+            state["result"] = debug_error(
+                error_text,
+                state["selected_model"]
+            )
+            state["execution_success"] = True
+            state["retry_count"] = 0
+            return state
+
+        # --------------------------------------------------
+        # Intelligent Editing
+        # --------------------------------------------------
+        elif task == "edit":
+
             response = EditingService().prepare_edit(
                 EditRequest(
                     file_path=state["file_path"],
@@ -90,31 +135,69 @@ def execute_task(state):
                 )
             )
             state["edit_response"] = response
+
             if not response.success:
-                state["result"] = f"Error: edit preparation failed: {response.error}"
+                state["result"] = (
+                    f"Edit preparation failed: {response.error}"
+                )
+                state["execution_success"] = False
                 return state
-            state["result"] = response.diff or "Edit preview prepared with no changes."
+
+            state["result"] = (
+                response.diff
+                or "Edit preview generated."
+            )
+            state["execution_success"] = True
+            state["retry_count"] = 0
             return state
 
-        if task == "deployment":
+        # --------------------------------------------------
+        # Deployment Tools
+        # --------------------------------------------------
+        elif task == "deployment":
             query = state["user_query"].lower()
             if "compose" in query:
-                state["result"] = save_docker_compose(project_path, state["selected_model"])
+                state["result"] = save_docker_compose(
+                    project_path,
+                    state["selected_model"]
+                )
             elif "requirements" in query:
-                packages = save_requirements(project_path)
-                state["result"] = f"Generated requirements.txt with {len(packages)} packages."
+                packages = save_requirements(
+                    project_path
+                )
+                state["result"] = (
+                    f"Generated requirements.txt "
+                    f"with {len(packages)} packages."
+                )
             elif "docker" in query:
-                state["result"] = save_dockerfile(project_path, state["selected_model"])
+                state["result"] = save_dockerfile(
+                    project_path,
+                    state["selected_model"]
+                )
             else:
-                state["result"] = "Deployment task detected but no deployment type specified."
+                state["result"] = (
+                    "Deployment task detected "
+                    "but no deployment type specified."
+                )
+            state["execution_success"] = True
+            state["retry_count"] = 0
             return state
 
-        state["result"] = f"Error: unsupported task '{task}'."
-        return state
+        # --------------------------------------------------
+        # Unsupported Task
+        # --------------------------------------------------
+        else:
+            state["result"] = (
+                f"Unsupported task: {task}"
+            )
+            state["execution_success"] = False
+            return state
     except Exception as exc:
-        state["result"] = f"Error: {type(exc).__name__}: {exc}"
+        state["result"] = (
+            f"{type(exc).__name__}: {exc}"
+        )
+        state["execution_success"] = False
         return state
-
 
 def planner_node(state):
     """Create the ordered execution plan for the current request."""
@@ -144,19 +227,40 @@ def should_continue(state):
     """Route to the next plan item only after a successful task."""
 
     if not state["execution_success"]:
+
+        if state["retry_count"] < state["max_retry"]:
+            return "retry"
+
         return "finish"
+
     if state["current_step"] >= len(state["plan"]):
         return "finish"
 
     return "continue"
 
+def should_continue_after_advance(state):
+    """
+    Determine whether to continue after advancing to next step.
+    Only finishes if we've moved beyond the last step.
+    """
+    if state["current_step"] >= len(state["plan"]):
+        return "finish"
+    return "continue"
+
 def evaluate_task(state):
     """Evaluate the result produced by the active task."""
-
     success = evaluate_execution(
         state["result"]
     )
     state["execution_success"] = success
+    return state
+
+def retry_node(state):
+    """
+    Retry the current task if execution failed.
+    """
+
+    state["retry_count"] += 1
     return state
 
 def memory_update(state):

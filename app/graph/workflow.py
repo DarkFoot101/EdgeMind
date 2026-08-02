@@ -11,10 +11,12 @@ from app.graph.nodes import (
     get_current_task,
     advance_step,
     should_continue,
+    should_continue_after_advance,
     planner_node,
     evaluate_task,
     memory_update,
-    memory_lookup
+    memory_lookup,
+    retry_node
 )
 
 graph = StateGraph(EdgeMindState)
@@ -39,6 +41,10 @@ graph.add_node(
 graph.add_node(
     "executor",
     execute_task
+)
+graph.add_node(
+    'retry',
+    retry_node
 )
 graph.add_node(
     "memory",
@@ -68,14 +74,23 @@ graph.add_edge("router", "executor")
 
 graph.add_edge("executor", "evaluator")
 
-graph.add_edge("evaluator", 'memory')
+graph.add_conditional_edges(
+    "evaluator",
+    should_continue,
+    {
+        "retry": "retry",
+        "continue": "memory",
+        "finish": END
+    }
+)
+
+graph.add_edge("retry", "router")
 
 graph.add_edge("memory", "advance")
 
-# now we are adding the conditional edge, that acts with the advanced step 
 graph.add_conditional_edges(
-    'advance',
-    should_continue,
+    "advance",
+    should_continue_after_advance,
     {
         "continue": "task",
         "finish": END
