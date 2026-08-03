@@ -9,16 +9,12 @@ def analyze_project(
     selected_model: str | None = None,
 ) -> dict:
     """Analyze project metadata with the selected local model."""
-
     # Step 1
     project_info = scan_project(project_path)
-
     # Step 2
     resources = get_system_resources()
-
     # Step 3
     model = selected_model or select_model("analyze")
-
     # Step 4
     prompt = f"""
         You are a senior software engineer.
