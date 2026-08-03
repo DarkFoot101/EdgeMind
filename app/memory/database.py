@@ -2,8 +2,10 @@
 # this file creates the sql database 
 
 import sqlite3
-from pathlib import Path 
-DB_PATH = Path("edgemind.db")
+from pathlib import Path
+DB_DIR = Path.home() / ".edgemind"
+DB_DIR.mkdir(parents=True, exist_ok=True)
+DB_PATH = DB_DIR / "edgemind.db"
 
 def get_connection():
     return sqlite3.connect(DB_PATH)
