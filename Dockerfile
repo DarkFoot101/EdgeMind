@@ -1,15 +1,6 @@
-Dockerfile
 FROM python:3.11-slim
-
-WORKDIR /app
-
-COPY requirements.txt .
+WORKDIR /usr/src/app
+COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
-
-COPY app ./app
-
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
-
-ENTRYPOINT ["python", "-m", "app.cli.main"]
-CMD ["--help"]
+COPY . .
+CMD ["python", "./your_main_script.py"]

@@ -29,12 +29,12 @@ def save_execution(state: dict[str, Any]) -> None:
             """,
             (
                 get_project_path(state.get("project_path", ".")),
-                state["user_query"],
-                state["current_task"],
+                state.get("user_query", "Unknown"),
+                state.get("current_task", "Unknown"),
                 state.get("file_path", ""),
-                state["selected_model"],
-                state["result"],
-                state["execution_success"],
+                state.get("selected_model", "Unknown"),
+                state.get("result", "Unknown"),
+                state.get("execution_success", False),
             ),
         )
 

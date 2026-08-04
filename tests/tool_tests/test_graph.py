@@ -1,13 +1,65 @@
-import unittest
-
-from app.graph.evaluator import evaluate_execution
-from app.graph.planner import create_plan
+from app.graph.workflow import workflow
 
 
-class GraphUnitTests(unittest.TestCase):
-    def test_planner_builds_a_deployment_plan(self) -> None:
-        self.assertEqual(create_plan("Generate Docker Compose"), ["deployment"])
+def run(query, file_path=""):
 
-    def test_evaluator_accepts_successful_error_related_language(self) -> None:
-        self.assertTrue(evaluate_execution("No errors were found."))
-        self.assertFalse(evaluate_execution("Error: source file is missing"))
+    print("=" * 70)
+    print(query)
+    print("=" * 70)
+
+    state = {
+
+        "user_query": query,
+
+        "project_path": ".",
+
+        "file_path": file_path,
+
+        "plan": [],
+
+        "current_step": 0,
+
+        "current_task": "",
+
+        "selected_model": "",
+
+        "result": "",
+
+        "execution_success": False,
+
+        "retry_count": 0,
+
+        "max_retry": 2,
+
+        "memory_context": "",
+
+        "edit_response": None,
+    }
+
+    result = workflow.invoke(state)
+
+    print("\nPlan:")
+    print(result["plan"])
+
+    print("\nSelected Model:")
+    print(result["selected_model"])
+
+    print("\nExecution Success:")
+    print(result["execution_success"])
+
+    print("\nResult:\n")
+    print(result["result"])
+
+
+def main():
+
+    run("Analyze this project")
+
+    run(
+        "Explain this code",
+        "app/models/model_router.py"
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -1,5 +1,8 @@
+version: '3'
 services:
   edgemind:
     build: .
-    command: ["--help"]
-    restart: "no"
+    depends_on:
+      - network_bridge
+network_bridge:
+  driver: bridge
