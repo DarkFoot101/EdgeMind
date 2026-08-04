@@ -44,5 +44,17 @@ def modify_code(
         model=request.model,
         system_prompt=SYSTEM_PROMPT,
     )
+    # --------------------------------------------------
+    # Clean LLM Output
+    # --------------------------------------------------
+    response = response.strip()
+    if "```" in response:
+        start = response.find("```")
+        end = response.rfind("```")
+        if start != end:
+            response = response[start + 3:end]
+            if response.startswith("python"):
+                response = response[len("python"):]
 
-    return response.strip()
+    response = response.strip()
+    return response

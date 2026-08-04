@@ -1,6 +1,6 @@
 FROM python:3.11-slim
-WORKDIR /usr/src/app
+WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-CMD ["python", "./your_main_script.py"]
+CMD ["python", "main.py"] # Replace with your main script name if different
