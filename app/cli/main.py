@@ -114,5 +114,15 @@ def generate_compose(project_path: str = ".") -> None:
     print(result)
 
 
+@app.command()
+def interactive():
+    """
+    Launch EdgeMind interactive shell.
+    """
+
+    from app.cli.interactive import run
+
+    run()
+
 if __name__ == "__main__":
     app()

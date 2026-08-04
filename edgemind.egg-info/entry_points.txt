@@ -1,0 +1,2 @@
+[console_scripts]
+edgemind = app.cli.interactive:run

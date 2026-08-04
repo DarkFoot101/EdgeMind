@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "edgemind"
+version = "1.0.0"
+description = "Resource-Aware Agentic Coding Assistant for Local AI Software Engineering"
+readme = "README.md"
+requires-python = ">=3.10"
+
+authors = [
+    { name = "Akhilesh Venkiteswaran" }
+]
+
+license = { text = "MIT" }
+
+dependencies = [
+    "ollama",
+    "langgraph",
+    "langchain",
+    "typer",
+    "psutil",
+]
+
+[project.scripts]
+edgemind = "app.cli.interactive:run"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
