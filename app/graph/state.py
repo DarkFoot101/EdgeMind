@@ -8,6 +8,7 @@ class EdgeMindState(TypedDict):
     plan: list[str]
     current_step: int
     current_task: str
+    task_instruction: str
     selected_model: str
     retry_count : int
     max_retry : int 

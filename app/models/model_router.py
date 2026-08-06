@@ -7,15 +7,12 @@ def select_model(task: str) -> str:
     Future versions will also consider RAM, CPU,
     battery level and thermal constraints.
     """
-
     resources = get_system_resources()
-
     ram = resources["ram_available_gb"]
 
-    # Future:
-    # if ram < 4:
-    #     return "tiny-model"
-
+    if task == "planner":
+        return "phi3:mini"
+        
     if task == "analyze":
         return "phi3:mini"
 

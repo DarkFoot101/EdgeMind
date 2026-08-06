@@ -1,3 +1,4 @@
+from app.graph import state
 from pathlib import Path
 
 from app.models.model_router import select_model
@@ -38,10 +39,12 @@ from app.memory.memory_manager import save_execution, search_memory
 def get_current_task(state):
     """Load the execution-plan item selected by ``current_step``."""
 
-    state["current_task"] = state["plan"][
-        state["current_step"]
-    ]
-
+    current = state["plan"][state["current_step"]]
+    state["current_task"] = current["tool"]
+    state["task_instruction"] = current.get(
+        "instruction",
+        ""
+    )
     return state
 
 def route_model(state):
@@ -130,10 +133,26 @@ def execute_task(state):
             response = EditingService().prepare_edit(
                 EditRequest(
                     file_path=state["file_path"],
-                    instruction=state["user_query"],
+                    instruction=state["task_instruction"],
                     model=state["selected_model"],
                 )
             )
+            service = EditingService()
+            if response.success:
+                service.apply_edit(
+                    response,
+                    state["file_path"],
+                )
+                state["result"] = (
+                    "Successfully modified the file.\n\n"
+                    + response.diff
+                )
+            else:
+                state["result"] = (
+                    f"Edit failed:\n{response.error}"
+                )
+            return state
+
             state["edit_response"] = response
 
             if not response.success:

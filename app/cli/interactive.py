@@ -4,6 +4,7 @@ Provides an interactive coding assistant
 similar to Claude Code.
 """
 
+from app.cli import session
 from app.setup.installer import run_setup
 from app.cli.banner import print_banner
 from app.cli.commands import (
@@ -43,8 +44,12 @@ def update_session_context(
             or word.endswith(".yml")
             or word.endswith(".md")
         ):
-            if Path(word).exists():
-                session.current_file = word
+            resolved = resolve_file(
+                word,
+                session.project_path,
+            )   
+            if resolved:
+                session.current_file = resolved
                 break
 
 
@@ -69,6 +74,33 @@ def create_state(session, query):
 def run():
 
     session = SessionState()
+    from app.setup.checks import (
+        check_ollama,
+        missing_models,
+    )
+    if not check_ollama():
+        print("\nOllama is not running.")
+        answer = input(
+            "Start it now? (Y/N): "
+        ).lower()
+        if answer == "y":
+            from app.setup.checks import start_ollama
+            if not start_ollama():
+                print(
+                    "Unable to start Ollama."
+                )
+                return
+
+    missing = missing_models()
+    if missing:
+        print("\nMissing Models\n")
+        for model in missing:
+            print(model)
+        print(
+            "\nRun 'setup' to install missing models."
+        )
+        return
+
     print_banner()
 
     while True:
@@ -131,3 +163,32 @@ def run():
             f"\n✓ Completed using {session.selected_model}\n"
         )
         print()
+
+def resolve_file(
+    filename: str,
+    project_path: str,
+):
+    """
+    Search the project recursively for a filename.
+    """
+
+    matches = list(
+        Path(project_path).rglob(filename)
+    )
+    if len(matches) == 1:
+        return str(matches[0])
+
+    if len(matches) > 1:
+        print(
+            "\nMultiple files found:\n"
+        )
+        for index, file in enumerate(matches, 1):
+            print(f"{index}. {file}")
+        choice = input(
+            "\nSelect file number: "
+        )
+        try:
+            return str(matches[int(choice)-1])
+        except Exception:
+            return None
+    return None
