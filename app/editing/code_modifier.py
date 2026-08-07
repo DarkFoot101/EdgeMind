@@ -8,6 +8,7 @@ This module NEVER writes files.
 
 from app.editing.models import EditRequest
 from app.models.ollama_client import generate_response
+import re 
 
 SYSTEM_PROMPT = """
 You are an expert Python software engineer.
@@ -22,6 +23,21 @@ Rules
 - Only modify what the instruction requests.
 - Never truncate code.
 """
+
+def clean_generated_code(code: str) -> str:
+    code = code.strip()
+    code = code.replace("```python", "")
+    code = code.replace("```", "")
+
+    code = re.sub(
+        r"^Here.*?\n",
+        "",
+        code,
+        flags=re.IGNORECASE,
+    )
+
+    return code.strip()
+    
 
 def modify_code(
     request: EditRequest
@@ -47,14 +63,5 @@ def modify_code(
     # --------------------------------------------------
     # Clean LLM Output
     # --------------------------------------------------
-    response = response.strip()
-    if "```" in response:
-        start = response.find("```")
-        end = response.rfind("```")
-        if start != end:
-            response = response[start + 3:end]
-            if response.startswith("python"):
-                response = response[len("python"):]
-
-    response = response.strip()
+    response = clean_generated_code(response)
     return response

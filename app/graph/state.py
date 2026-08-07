@@ -16,3 +16,4 @@ class EdgeMindState(TypedDict):
     execution_success: bool
     memory_context: str
     edit_response: EditResponse | None
+    modified_file: str

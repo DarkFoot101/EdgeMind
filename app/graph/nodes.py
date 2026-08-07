@@ -129,45 +129,40 @@ def execute_task(state):
         # Intelligent Editing
         # --------------------------------------------------
         elif task == "edit":
+            service = EditingService()
 
-            response = EditingService().prepare_edit(
+            response = service.prepare_edit(
                 EditRequest(
                     file_path=state["file_path"],
-                    instruction=state["task_instruction"],
+                    instruction=state.get(
+                        "task_instruction",
+                        state["user_query"],
+                    ),
                     model=state["selected_model"],
                 )
             )
-            service = EditingService()
-            if response.success:
-                service.apply_edit(
-                    response,
-                    state["file_path"],
-                )
-                state["result"] = (
-                    "Successfully modified the file.\n\n"
-                    + response.diff
-                )
-            else:
-                state["result"] = (
-                    f"Edit failed:\n{response.error}"
-                )
-            return state
-
             state["edit_response"] = response
 
             if not response.success:
                 state["result"] = (
-                    f"Edit preparation failed: {response.error}"
+                    f"Edit failed:\n{response.error}"
                 )
                 state["execution_success"] = False
                 return state
 
-            state["result"] = (
-                response.diff
-                or "Edit preview generated."
+            service.apply_edit(
+                response,
+                state["file_path"],
             )
+
+            state['modified_file'] = state['file_path']
+            state["result"] = (
+                "Successfully modified the file.\n\n"
+                + response.diff
+            )
+
             state["execution_success"] = True
-            state["retry_count"] = 0
+
             return state
 
         # --------------------------------------------------

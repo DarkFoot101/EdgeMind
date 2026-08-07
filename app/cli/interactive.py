@@ -4,6 +4,8 @@ Provides an interactive coding assistant
 similar to Claude Code.
 """
 
+import string 
+from app.graph import state
 from app.cli import session
 from app.setup.installer import run_setup
 from app.cli.banner import print_banner
@@ -16,41 +18,40 @@ from app.cli.commands import (
 from app.cli.session import SessionState
 from app.graph.workflow import workflow
 from pathlib import Path
+import re 
 
 
-def update_session_context(
-    session,
-    query: str,
-):
+def update_session_context(session, query):
     """
-    Extract useful context from the user's prompt.
-
-    This allows follow-up prompts such as
-    'modify it' or 'explain it again'
-    without requiring the user to repeat
-    the file path.
+    Update the active working context from the user's prompt.
     """
-    
+    session.project_path = str(Path.cwd())
+    files = re.findall(
+        r"[\w./\\-]+\.[A-Za-z0-9]+",
+        query,
+    )
 
-    words = query.split()
-    for word in words:
-        if "." in words:
-            session.project_path = "."
-        if (
-            word.endswith(".py")
-            or word.endswith(".txt")
-            or word.endswith(".json")
-            or word.endswith(".yaml")
-            or word.endswith(".yml")
-            or word.endswith(".md")
-        ):
-            resolved = resolve_file(
-                word,
-                session.project_path,
-            )   
-            if resolved:
-                session.current_file = resolved
-                break
+    # User mentioned a file
+    if files:
+        filename = files[0].strip(string.punctuation)
+        resolved = resolve_file(
+            filename,
+            session.project_path,
+        )
+
+        if resolved:
+            session.active_file = resolved
+            session.active_directory = str(Path(resolved).parent)
+            print(f"Resolved file: {resolved}")
+            return
+
+    # No filename → keep previous active file
+    if session.active_file:
+        print(
+            f"Using active file: {session.active_file}"
+        )
+    else:
+        print("No active file.")
 
 
 def create_state(session, query):
@@ -59,7 +60,7 @@ def create_state(session, query):
 
         "user_query": query,
         "project_path": session.project_path,
-        "file_path": session.current_file or "",
+        "file_path": session.active_file or "",
         "plan": [],
         "current_step": 0,
         "current_task": "",
@@ -148,6 +149,11 @@ def run():
             query,
         )
 
+        print("\n========== STATE ==========")
+        print(f"Project Path : {state['project_path']}")
+        print(f"File Path    : {state['file_path']}")
+        print("===========================\n")      
+
         result = workflow.invoke(state)
 
         print(result["result"])
@@ -158,6 +164,7 @@ def run():
         session.remember(
             query,
             result["result"],
+            state["file_path"]
         )
         print(
             f"\n✓ Completed using {session.selected_model}\n"
@@ -169,26 +176,48 @@ def resolve_file(
     project_path: str,
 ):
     """
-    Search the project recursively for a filename.
+    Search the project recursively for a file.
     """
 
-    matches = list(
-        Path(project_path).rglob(filename)
-    )
+    project = Path(project_path)
+    IGNORED_DIRS = {
+        ".git",
+        ".edgemind",
+        "__pycache__",
+        ".venv",
+        "venv",
+        "node_modules",
+    }
+
+    matches = []
+
+    for path in project.rglob(filename):
+        if any(
+            ignored in path.parts
+            for ignored in IGNORED_DIRS
+        ):
+            continue
+        matches.append(path)
+    
+    print(f"\nSearching for: {filename}")
+    print(f"Found {len(matches)} match(es).")
+
+    for match in matches:
+        print(match)  
+
     if len(matches) == 1:
         return str(matches[0])
 
     if len(matches) > 1:
-        print(
-            "\nMultiple files found:\n"
-        )
-        for index, file in enumerate(matches, 1):
-            print(f"{index}. {file}")
-        choice = input(
-            "\nSelect file number: "
-        )
+        print("\nMultiple files found:\n")
+        for i, file in enumerate(matches, 1):
+            print(f"{i}. {file}")
         try:
-            return str(matches[int(choice)-1])
+            choice = int(
+                input("\nSelect file: ")
+            )
+            return str(matches[choice - 1])
         except Exception:
             return None
+
     return None

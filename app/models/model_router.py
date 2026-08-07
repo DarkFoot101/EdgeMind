@@ -11,13 +11,13 @@ def select_model(task: str) -> str:
     ram = resources["ram_available_gb"]
 
     if task == "planner":
-        return "phi3:mini"
+        return "qwen2.5-coder:3b"
         
     if task == "analyze":
-        return "phi3:mini"
+        return "qwen2.5-coder:3b"
 
     elif task == "deployment":
-        return "phi3:mini"
+        return "qwen2.5-coder:3b"
 
     elif task == "debug":
         return "qwen2.5-coder:3b"

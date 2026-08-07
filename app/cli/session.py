@@ -18,13 +18,15 @@ class SessionState:
     project_name: str = Path.cwd().name
 
     # Current context
-    current_file: str | None = None
+    active_file: str | None = None
+    active_directory: str | None = None
     selected_model: str | None = None
 
     # Previous interaction
     last_query: str = ""
     last_result: str = ""
     last_plan: list[str] = field(default_factory=list)
+    last_edited_file: str | None = None 
 
     # Runtime
     memory_enabled: bool = True
@@ -34,20 +36,19 @@ class SessionState:
 
     def remember(
         self,
-        query: str,
-        result: str,
+        query,
+        result,
+        file_path=None,
     ):
-        self.last_query = query
-        self.last_result = result
-        self.conversation_history.append(
-            (
-                query,
-                result,
+        if file_path:
+            self.active_file = file_path
+            self.active_directory = str(
+                Path(file_path).parent
             )
-        )
 
     def clear(self):
-        self.current_file = None
+        self.active_file = None
+        self.active_directory = None
         self.selected_model = None
         self.last_query = ""
         self.last_result = ""
