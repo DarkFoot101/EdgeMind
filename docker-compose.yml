@@ -1,8 +1,7 @@
 version: '3'
+
 services:
   edgemind:
     build: .
-    depends_on:
-      - network_bridge
-network_bridge:
-  driver: bridge
+    volumes:
+      - .:/app

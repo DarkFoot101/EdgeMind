@@ -32,7 +32,7 @@ Analyze an entire project or a source file.
 
 edit
 Purpose:
-Modify existing code.
+Modify existing code or create a new file based on existing code.
 
 Use this tool for:
 - fixing bugs
@@ -40,6 +40,7 @@ Use this tool for:
 - refactoring
 - optimization
 - improving readability
+- creating a new file from existing code
 
 debug
 Purpose:
@@ -66,7 +67,7 @@ Never invent tool names.
 
 Never invent fields.
 
-Only output JSON.
+Only output JSON matching the Schema.
 
 Schema:
 
@@ -78,12 +79,17 @@ Schema:
         },
         {
             "tool":"edit",
-            "instruction":"Convert Java to optimized Python."
+            "instruction":"Convert Java to optimized Python.",
+            "target_file":"good.py",
+            "operation":"create"
         }
     ]
 }
 
-Good Example
+If the user wants to create a new file (e.g. "create good.py", "save as optimized.py", etc.), set "operation" to "create" and "target_file" to the name/path of the file to create (e.g., "good.py").
+Otherwise, set "operation" to "modify" and "target_file" to null or the name of the file being modified.
+
+Good Example 1
 
 User:
 Fix bad_dp.java, convert it to Python and optimize it.
@@ -97,7 +103,30 @@ Output:
         },
         {
             "tool":"edit",
-            "instruction":"Convert the Java implementation into clean Python and optimize the dynamic programming algorithm."
+            "instruction":"Convert the Java implementation into clean Python and optimize the dynamic programming algorithm.",
+            "target_file":null,
+            "operation":"modify"
+        }
+    ]
+}
+
+Good Example 2
+
+User:
+Convert bad.java to Python and create good.py
+
+Output:
+
+{
+    "tasks":[
+        {
+            "tool":"analyze"
+        },
+        {
+            "tool":"edit",
+            "instruction":"Convert bad.java to Python.",
+            "target_file":"good.py",
+            "operation":"create"
         }
     ]
 }
@@ -122,21 +151,22 @@ def clean_response(response: str) -> str:
 def create_plan(
     user_query: str,
     memory: str = "",
-):
+) -> list[dict]:
     """
     Generate a validated execution plan.
     """
 
     prompt = f"""
-        Memory Context
+        Memory Context:
         {memory}
-        User Request
+        User Request:
         {user_query}
     """
 
+    model = select_model("planner")
     response = generate_response(
         prompt=prompt,
-        model=select_model("planner"),
+        model=model,
         system_prompt=SYSTEM_PROMPT,
     )
 
@@ -150,12 +180,45 @@ def create_plan(
         return [task.model_dump() for task in plan.tasks]
 
     except Exception as exc:
-        print("\nPlanner Validation Failed\n")
+        print("\nPlanner Validation Failed on first attempt, retrying with correction prompt...\n")
         print(exc)
 
-        return [
-            {
-                "tool": "analyze",
-                "instruction": "",
-            }
-        ]
+        # Retry once with a correction prompt
+        correction_prompt = f"""
+        Your previous response was invalid.
+        Error: {str(exc)}
+        
+        Previous Output:
+        {response}
+        
+        Please correct the output. It must be valid JSON conforming to the schema:
+        {{
+            "tasks": [
+                {{
+                    "tool": "analyze" | "edit" | "debug" | "deployment" | "explain",
+                    "instruction": "...",
+                    "target_file": "..." | null,
+                    "operation": "modify" | "create"
+                }}
+            ]
+        }}
+        Only output the JSON object. Do not include explanation.
+        """
+
+        try:
+            retry_response = generate_response(
+                prompt=correction_prompt,
+                model=model,
+                system_prompt=SYSTEM_PROMPT,
+            )
+            print("\n===== RAW PLANNER RETRY OUTPUT =====")
+            print(retry_response)
+            print("====================================\n")
+
+            cleaned = clean_response(retry_response)
+            plan = Plan.model_validate_json(cleaned)
+            return [task.model_dump() for task in plan.tasks]
+        except Exception as retry_exc:
+            print("\nPlanner Validation Failed on retry.\n")
+            print(retry_exc)
+            raise RuntimeError(f"Planner failed to generate a valid execution plan. Validation error: {retry_exc}")

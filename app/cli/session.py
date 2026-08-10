@@ -36,15 +36,27 @@ class SessionState:
 
     def remember(
         self,
-        query,
-        result,
-        file_path=None,
+        query: str,
+        result: str,
+        file_path: str | None = None,
+        plan: list = None,
+        model: str | None = None,
+        last_edited_file: str | None = None,
     ):
+        self.last_query = query
+        self.last_result = result
+        if plan is not None:
+            self.last_plan = plan
+        if model is not None:
+            self.selected_model = model
+        if last_edited_file is not None:
+            self.last_edited_file = last_edited_file
         if file_path:
             self.active_file = file_path
             self.active_directory = str(
                 Path(file_path).parent
             )
+        self.conversation_history.append((query, result))
 
     def clear(self):
         self.active_file = None
@@ -53,4 +65,5 @@ class SessionState:
         self.last_query = ""
         self.last_result = ""
         self.last_plan.clear()
+        self.last_edited_file = None
         self.conversation_history.clear()

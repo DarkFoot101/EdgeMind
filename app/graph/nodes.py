@@ -13,6 +13,7 @@ from app.tools.docker_compose_generator import save_docker_compose
 from app.graph.evaluator import evaluate_execution
 from app.graph.planner import create_plan
 from app.memory.memory_manager import save_execution, search_memory
+from app.editing.validator import detect_language
 
 
 # # classifier node functionality
@@ -38,6 +39,12 @@ from app.memory.memory_manager import save_execution, search_memory
 
 def get_current_task(state):
     """Load the execution-plan item selected by ``current_step``."""
+    if not state.get("plan") or state["current_step"] >= len(state["plan"]):
+        state["current_task"] = "finish"
+        state["task_instruction"] = ""
+        state["target_file"] = None
+        state["operation"] = "modify"
+        return state
 
     current = state["plan"][state["current_step"]]
     state["current_task"] = current["tool"]
@@ -45,6 +52,8 @@ def get_current_task(state):
         "instruction",
         ""
     )
+    state["target_file"] = current.get("target_file", None)
+    state["operation"] = current.get("operation", "modify")
     return state
 
 def route_model(state):
@@ -62,7 +71,6 @@ def execute_task(state):
     This node performs exactly one task from the execution plan.
     On success:
         - execution_success = True
-        - retry_count is reset
     On failure:
         - execution_success = False
         - retry_count is NOT modified
@@ -79,7 +87,6 @@ def execute_task(state):
         if task == "Use memory context":
             state["result"] = "Using previous project memory."
             state["execution_success"] = True
-            state["retry_count"] = 0
             return state
 
         # --------------------------------------------------
@@ -92,7 +99,6 @@ def execute_task(state):
             )
             state["result"] = report["analysis"]
             state["execution_success"] = True
-            state["retry_count"] = 0
             return state
 
         # --------------------------------------------------
@@ -104,7 +110,6 @@ def execute_task(state):
                 selected_model=state["selected_model"]
             )
             state["execution_success"] = True
-            state["retry_count"] = 0
             return state
 
         # --------------------------------------------------
@@ -122,7 +127,6 @@ def execute_task(state):
                 state["selected_model"]
             )
             state["execution_success"] = True
-            state["retry_count"] = 0
             return state
 
         # --------------------------------------------------
@@ -130,6 +134,52 @@ def execute_task(state):
         # --------------------------------------------------
         elif task == "edit":
             service = EditingService()
+
+            # Resolve target file if operation is create
+            target_file = state.get("target_file")
+            operation = state.get("operation", "modify")
+            resolved_target = None
+            if operation == "create" and target_file:
+                proj_path = Path(project_path).resolve()
+                if state.get("file_path"):
+                    active_dir = Path(state["file_path"]).parent.resolve()
+                else:
+                    active_dir = proj_path
+                target_path = Path(target_file)
+                # If target_file contains path separators, use it as is or resolve from project root
+                if len(target_path.parts) > 1:
+                    resolved_target = (proj_path / target_path).resolve()
+                else:
+                    resolved_target = (active_dir / target_path).resolve()
+                
+                try:
+                    resolved_target.relative_to(proj_path)
+                except ValueError:
+                    resolved_target = (proj_path / target_path.name).resolve()
+            
+            # Detect source/target languages
+            source_lang = "python"
+            if state.get("file_path"):
+                source_lang = detect_language(state["file_path"])
+            
+            target_lang = source_lang
+            if operation == "create" and resolved_target:
+                target_lang = detect_language(str(resolved_target))
+            elif state.get("file_path"):
+                target_lang = detect_language(state["file_path"])
+
+            # Let's inspect user query or task instruction for target language if it's a conversion instruction
+            instr_lower = state.get("task_instruction", "").lower() + " " + state["user_query"].lower()
+            if "python" in instr_lower:
+                target_lang = "python"
+            elif "java" in instr_lower:
+                target_lang = "java"
+            elif "c++" in instr_lower or "cpp" in instr_lower:
+                target_lang = "cpp"
+            elif "javascript" in instr_lower or "js" in instr_lower:
+                target_lang = "javascript"
+            elif "typescript" in instr_lower or "ts" in instr_lower:
+                target_lang = "typescript"
 
             response = service.prepare_edit(
                 EditRequest(
@@ -139,30 +189,30 @@ def execute_task(state):
                         state["user_query"],
                     ),
                     model=state["selected_model"],
+                    source_language=source_lang,
+                    target_language=target_lang,
+                    target_file=str(resolved_target) if resolved_target else None,
+                    operation=operation,
                 )
             )
             state["edit_response"] = response
 
             if not response.success:
-                state["result"] = (
-                    f"Edit failed:\n{response.error}"
-                )
+                state["result"] = f"Edit failed:\n{response.error}"
                 state["execution_success"] = False
                 return state
 
             service.apply_edit(
                 response,
-                state["file_path"],
+                response.file_path,
             )
 
-            state['modified_file'] = state['file_path']
+            state["modified_file"] = response.file_path
             state["result"] = (
                 "Successfully modified the file.\n\n"
                 + response.diff
             )
-
             state["execution_success"] = True
-
             return state
 
         # --------------------------------------------------
@@ -194,7 +244,6 @@ def execute_task(state):
                     "but no deployment type specified."
                 )
             state["execution_success"] = True
-            state["retry_count"] = 0
             return state
 
         # --------------------------------------------------
@@ -215,15 +264,27 @@ def execute_task(state):
 
 def planner_node(state):
     """Create the ordered execution plan for the current request."""
-
-    plan = create_plan(
-        user_query = state["user_query"],
-        memory = state["memory_context"]
-    )
-    state["plan"] = plan 
-    state["current_step"] = 0
-    state["current_task"] = plan[0]
-
+    try:
+        plan = create_plan(
+            user_query=state["user_query"],
+            memory=state["memory_context"]
+        )
+        if not plan:
+            raise ValueError("Planner returned an empty plan.")
+        state["plan"] = plan 
+        state["current_step"] = 0
+        state["current_task"] = plan[0]["tool"]
+        state["task_instruction"] = plan[0].get("instruction", "")
+        state["target_file"] = plan[0].get("target_file", None)
+        state["operation"] = plan[0].get("operation", "modify")
+        state["execution_success"] = True
+    except Exception as exc:
+        state["plan"] = []
+        state["current_step"] = 0
+        state["current_task"] = "error"
+        state["result"] = f"Planner failed: {str(exc)}"
+        state["execution_success"] = False
+        
     return state
 
 # this makes the agent go iteratively 
@@ -232,9 +293,8 @@ def advance_step(state):
     Move to the next task in the execution plan.
     """
     state["current_step"] += 1
-    if state["current_step"] < len(state["plan"]):
-        state["current_task"] = state["plan"][state["current_step"]]
-
+    # Reset retry count for the next task
+    state["retry_count"] = 0
     return state
 
 def should_continue(state):
@@ -263,9 +323,21 @@ def should_continue_after_advance(state):
 
 def evaluate_task(state):
     """Evaluate the result produced by the active task."""
-    success = evaluate_execution(
-        state["result"]
-    )
+    task = state.get("current_task")
+    success = True
+    
+    if task == "edit":
+        edit_response = state.get("edit_response")
+        if edit_response is None or not edit_response.success:
+            success = False
+        else:
+            if not state.get("execution_success", False):
+                success = False
+    else:
+        success = evaluate_execution(state["result"])
+        if not state.get("execution_success", True):
+            success = False
+
     state["execution_success"] = success
     return state
 

@@ -2,9 +2,8 @@
 Planner output schema for EdgeMind.
 """
 
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel
-from typing import List
 
 class Task(BaseModel):
     tool: Literal[
@@ -15,6 +14,8 @@ class Task(BaseModel):
         "explain",
     ]
     instruction: str = ""
+    target_file: Optional[str] = None
+    operation: Optional[Literal["modify", "create"]] = "modify"
 
 class Plan(BaseModel):
     tasks: list[Task]

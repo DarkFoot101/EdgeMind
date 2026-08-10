@@ -42,7 +42,7 @@ def show_status(session):
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     print(f"\nProject         : {session.project_name}")
-    print(f"Current File    : {session.current_file}")
+    print(f"Current File    : {session.active_file}")
     print(f"Last Query      : {session.last_query}")
     print(f"Conversation    : {len(session.conversation_history)} turns")
     print(f"Selected Model  : {session.selected_model}")

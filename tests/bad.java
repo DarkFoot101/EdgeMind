@@ -1,14 +1,8 @@
-class Solution:
-    def lengthOfLongestSubstring(self, s: str) -> int:
-        maxLength = 0
-        left = 0
-        lastSeen = {}
-
-        for right in range(len(s)):
-            c = s[right]
-            if c in lastSeen and lastSeen[c] >= left:
-                left = lastSeen[c] + 1
-            lastSeen[c] = right
-            maxLength = max(maxLength, right - left + 1)
-
-        return maxLength
+class Fibonacci:
+    def fib(self, n):
+        if n == 0:
+            return 0
+        elif n == 1:
+            return 1
+        else:
+            return self.fib(n - 1) + self.fib(n - 2)

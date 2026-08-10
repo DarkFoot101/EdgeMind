@@ -29,7 +29,7 @@ from app.editing.file_manager import (
     write_file,
     restore_backup,
 )
-from app.editing.validator import validate_python
+from app.editing.validator import validate_code
 from app.editing.diff_generator import generate_diff
 from app.editing.code_modifier import modify_code
 
@@ -50,27 +50,42 @@ class EditingService:
         """
 
         try:
-            if request.language.lower() != "python":
-                raise ValueError("Only Python edits are currently supported.")
+            # ----------------------------
+            # Determine Target File to Write
+            # ----------------------------
+            file_to_write = request.target_file if (request.operation == "create" and request.target_file) else request.file_path
 
             # ----------------------------
-            # Read Original Source
+            # Read Original Source Content
             # ----------------------------
-            original_code = read_file(
-                request.file_path
-            )
-            # Store source inside request
-            request.source_code = original_code
+            source_content = ""
+            if request.file_path:
+                try:
+                    source_content = read_file(request.file_path)
+                except Exception:
+                    pass
+            request.source_code = source_content
+
+            # ----------------------------
+            # Read original target content (for diff comparison)
+            # ----------------------------
+            original_code = ""
+            if Path(file_to_write).exists():
+                try:
+                    original_code = read_file(file_to_write)
+                except Exception:
+                    pass
 
             # ----------------------------
             # Backup
             # ----------------------------
             backup_path = None
             if request.create_backup:
-
-                backup_path = backup_file(
-                    request.file_path
-                )
+                if Path(file_to_write).exists():
+                    try:
+                        backup_path = backup_file(file_to_write)
+                    except Exception:
+                        pass
 
             # ----------------------------
             # Generate Modified Code
@@ -84,13 +99,14 @@ class EditingService:
             # ----------------------------
             validation_message = "Validation Skipped"
             if request.validate_output:
-                success, validation_message = validate_python(
-                    modified_code
+                success, validation_message = validate_code(
+                    modified_code,
+                    request.target_language
                 )
                 if not success:
                     return EditResponse(
                         success=False,
-                        file_path=request.file_path,
+                        file_path=file_to_write,
                         original_code=original_code,
                         modified_code=modified_code,
                         diff="",
@@ -108,13 +124,13 @@ class EditingService:
                     original=original_code,
                     modified=modified_code,
                     filename=Path(
-                        request.file_path
+                        file_to_write
                     ).name,
                 )
 
             return EditResponse(
                 success=True,
-                file_path=request.file_path,
+                file_path=file_to_write,
                 original_code=original_code,
                 modified_code=modified_code,
                 diff=diff,

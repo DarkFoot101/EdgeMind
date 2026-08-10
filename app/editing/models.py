@@ -12,12 +12,15 @@ class EditRequest:
     instruction: str
     source_code: str = ""
     model: str = "qwen2.5-coder:3b"
-    language: str = "python"
+    source_language: str = "python"
+    target_language: str = "python"
     preserve_formatting: bool = True
     create_backup: bool = True
     validate_output: bool = True
     generate_diff: bool = True
     metadata: Optional[dict] = None
+    target_file: Optional[str] = None
+    operation: str = "modify"  # "modify" or "create"
 
 
 @dataclass

@@ -1,4 +1,5 @@
 langgraph
 ollama
 psutil
+pydantic
 typer
