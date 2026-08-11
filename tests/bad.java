@@ -1,8 +1,10 @@
-class Fibonacci:
-    def fib(self, n):
-        if n == 0:
-            return 0
-        elif n == 1:
-            return 1
-        else:
-            return self.fib(n - 1) + self.fib(n - 2)
+public class FibonacciIterative {
+    public static void main(String[] args) {
+        int n = 10; // Number of terms
+        int first = 0, second = 1;
+
+        System.out.print("Fibonacci Series: ");
+        for (int i = 0; i < n; i++) {
+            
+    }
+}   

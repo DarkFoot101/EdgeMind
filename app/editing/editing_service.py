@@ -28,6 +28,7 @@ from app.editing.file_manager import (
     backup_file,
     write_file,
     restore_backup,
+    create_file,
 )
 from app.editing.validator import validate_code
 from app.editing.diff_generator import generate_diff
@@ -41,102 +42,113 @@ class EditingService:
 
     def prepare_edit(
         self,
-        request: EditRequest
+        request: EditRequest,
     ) -> EditResponse:
         """
-        Generate an edit preview.
-
-        No files are modified.
+        Generate an edit preview without modifying files.
         """
 
         try:
-            # ----------------------------
-            # Determine Target File to Write
-            # ----------------------------
-            file_to_write = request.target_file if (request.operation == "create" and request.target_file) else request.file_path
+            source_path = Path(
+                request.file_path
+            ).resolve()
 
-            # ----------------------------
-            # Read Original Source Content
-            # ----------------------------
-            source_content = ""
-            if request.file_path:
-                try:
-                    source_content = read_file(request.file_path)
-                except Exception:
-                    pass
+            if not source_path.exists():
+                raise FileNotFoundError(
+                    f"Source file not found: {source_path}"
+                )
+
+            source_content = read_file(
+                str(source_path)
+            )
+
             request.source_code = source_content
 
-            # ----------------------------
-            # Read original target content (for diff comparison)
-            # ----------------------------
-            original_code = ""
-            if Path(file_to_write).exists():
-                try:
-                    original_code = read_file(file_to_write)
-                except Exception:
-                    pass
+            if request.operation == "create":
+                if not request.target_file:
+                    raise ValueError(
+                        "target_file is required for create operation."
+                    )
 
-            # ----------------------------
-            # Backup
-            # ----------------------------
-            backup_path = None
-            if request.create_backup:
-                if Path(file_to_write).exists():
-                    try:
-                        backup_path = backup_file(file_to_write)
-                    except Exception:
-                        pass
+                target_path = Path(
+                    request.target_file
+                ).resolve()
 
-            # ----------------------------
-            # Generate Modified Code
-            # ----------------------------
+                if target_path.exists():
+                    raise FileExistsError(
+                        f"Target file already exists: {target_path}"
+                    )
+
+                original_code = ""
+
+                backup_path = None
+
+            else:
+                target_path = source_path
+
+                original_code = source_content
+
+                backup_path = None
+
+                if request.create_backup:
+                    backup_path = backup_file(
+                        str(target_path)
+                    )
+
             modified_code = modify_code(
                 request=request,
             )
-            
-            # ----------------------------
-            # Validation
-            # ----------------------------
+
             validation_message = "Validation Skipped"
+
             if request.validate_output:
                 success, validation_message = validate_code(
                     modified_code,
-                    request.target_language
+                    request.target_language,
                 )
+
                 if not success:
                     return EditResponse(
                         success=False,
-                        file_path=file_to_write,
-                        original_code=original_code,
+                        file_path=str(source_path),
+                        original_code=source_content,
                         modified_code=modified_code,
                         diff="",
                         validation_message=validation_message,
                         backup_path=backup_path,
                         error=validation_message,
+                        operation=request.operation,
+                        output_file=(
+                            str(target_path)
+                            if request.operation == "create"
+                            else None
+                        ),
                     )
 
-            # ----------------------------
-            # Diff
-            # ----------------------------
             diff = ""
+
             if request.generate_diff:
                 diff = generate_diff(
                     original=original_code,
                     modified=modified_code,
-                    filename=Path(
-                        file_to_write
-                    ).name,
+                    filename=target_path.name,
                 )
 
             return EditResponse(
                 success=True,
-                file_path=file_to_write,
-                original_code=original_code,
+                file_path=str(source_path),
+                original_code=source_content,
                 modified_code=modified_code,
                 diff=diff,
                 validation_message=validation_message,
                 backup_path=backup_path,
                 error=None,
+                operation=request.operation,
+                output_file=(
+                    str(target_path)
+                    if request.operation == "create"
+                    else None
+                ),
             )
 
         except Exception as exc:
@@ -149,6 +161,8 @@ class EditingService:
                 validation_message="Preparation Failed",
                 backup_path=None,
                 error=f"{type(exc).__name__}: {exc}",
+                operation=request.operation,
+                output_file=request.target_file,
             )
 
     def apply_edit(
@@ -157,16 +171,31 @@ class EditingService:
         file_path: str,
     ) -> bool:
         """
-        Apply an approved edit.
+        Apply an approved edit or create a new file.
         """
+
         if not response.success:
             return False
-        if Path(file_path).resolve() != Path(response.file_path).resolve():
-            raise ValueError("An edit may only be applied to the file it previewed.")
+
+        target = Path(file_path).resolve()
+
+        if response.operation == "create":
+            create_file(
+                str(target),
+                response.modified_code,
+            )
+            return True
+
+        if target != Path(response.file_path).resolve():
+            raise ValueError(
+                "An edit may only be applied to the file it previewed."
+            )
+
         write_file(
-            file_path,
+            str(target),
             response.modified_code,
         )
+
         return True
 
     def rollback(
@@ -183,3 +212,26 @@ class EditingService:
             return True
         except (FileNotFoundError, OSError, ValueError):
             return False
+
+    def create_file(
+        self,
+        response: EditResponse,
+    ) -> bool:
+        """
+        Create a new file from generated code.
+        """
+
+        if not response.success:
+            return False
+
+        if not response.output_file:
+            raise ValueError(
+                "Output file is required for create operation."
+            )
+
+        create_file(
+            response.output_file,
+            response.modified_code,
+        )
+
+        return True

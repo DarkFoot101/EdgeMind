@@ -1,3 +1,4 @@
+from asyncio import tasks
 from app.graph import state
 from pathlib import Path
 
@@ -45,15 +46,22 @@ def get_current_task(state):
         state["target_file"] = None
         state["operation"] = "modify"
         return state
-
-    current = state["plan"][state["current_step"]]
-    state["current_task"] = current["tool"]
-    state["task_instruction"] = current.get(
+    
+    task = state["plan"][state["current_step"]]
+    state["current_task"] = task["tool"]
+    state["task_instruction"] = task.get(
         "instruction",
-        ""
+        "",
     )
-    state["target_file"] = current.get("target_file", None)
-    state["operation"] = current.get("operation", "modify")
+    state["operation"] = task.get(
+        "operation",
+        "modify",
+    )
+    state["target_file"] = task.get(
+        "target_file",
+        "",
+    )
+
     return state
 
 def route_model(state):
@@ -135,84 +143,150 @@ def execute_task(state):
         elif task == "edit":
             service = EditingService()
 
-            # Resolve target file if operation is create
             target_file = state.get("target_file")
             operation = state.get("operation", "modify")
             resolved_target = None
-            if operation == "create" and target_file:
-                proj_path = Path(project_path).resolve()
-                if state.get("file_path"):
-                    active_dir = Path(state["file_path"]).parent.resolve()
-                else:
-                    active_dir = proj_path
-                target_path = Path(target_file)
-                # If target_file contains path separators, use it as is or resolve from project root
-                if len(target_path.parts) > 1:
-                    resolved_target = (proj_path / target_path).resolve()
-                else:
-                    resolved_target = (active_dir / target_path).resolve()
-                
-                try:
-                    resolved_target.relative_to(proj_path)
-                except ValueError:
-                    resolved_target = (proj_path / target_path.name).resolve()
-            
-            # Detect source/target languages
-            source_lang = "python"
-            if state.get("file_path"):
-                source_lang = detect_language(state["file_path"])
-            
-            target_lang = source_lang
-            if operation == "create" and resolved_target:
-                target_lang = detect_language(str(resolved_target))
-            elif state.get("file_path"):
-                target_lang = detect_language(state["file_path"])
 
-            # Let's inspect user query or task instruction for target language if it's a conversion instruction
-            instr_lower = state.get("task_instruction", "").lower() + " " + state["user_query"].lower()
-            if "python" in instr_lower:
+            if operation == "create":
+                if not target_file:
+                    state["result"] = "Edit failed: target_file is required for create operation."
+                    state["execution_success"] = False
+                    return state
+
+                project_root = Path(project_path).resolve()
+                source_path = Path(state["file_path"]).resolve()
+
+                target_path = Path(target_file)
+
+                if target_path.is_absolute():
+                    resolved_target = target_path
+                elif len(target_path.parts) > 1:
+                    resolved_target = (
+                        project_root / target_path
+                    ).resolve()
+                else:
+                    resolved_target = (
+                        source_path.parent / target_path
+                    ).resolve()
+
+                try:
+                    resolved_target.relative_to(project_root)
+                except ValueError:
+                    state["result"] = (
+                        "Edit failed: target file must be inside the project."
+                    )
+                    state["execution_success"] = False
+                    return state
+
+            source_lang = "python"
+
+            if state.get("file_path"):
+                source_lang = detect_language(
+                    state["file_path"]
+                )
+
+            target_lang = source_lang
+
+            if resolved_target:
+                target_lang = detect_language(
+                    str(resolved_target)
+                )
+
+            instruction = (
+                state.get("task_instruction")
+                or state["user_query"]
+            )
+
+            instruction_lower = instruction.lower()
+
+            if "python" in instruction_lower:
                 target_lang = "python"
-            elif "java" in instr_lower:
+            elif "java" in instruction_lower:
                 target_lang = "java"
-            elif "c++" in instr_lower or "cpp" in instr_lower:
+            elif (
+                "c++" in instruction_lower
+                or "cpp" in instruction_lower
+            ):
                 target_lang = "cpp"
-            elif "javascript" in instr_lower or "js" in instr_lower:
+            elif (
+                "javascript" in instruction_lower
+                or "js" in instruction_lower
+            ):
                 target_lang = "javascript"
-            elif "typescript" in instr_lower or "ts" in instr_lower:
+            elif (
+                "typescript" in instruction_lower
+                or "ts" in instruction_lower
+            ):
                 target_lang = "typescript"
 
             response = service.prepare_edit(
                 EditRequest(
                     file_path=state["file_path"],
-                    instruction=state.get(
-                        "task_instruction",
-                        state["user_query"],
-                    ),
+                    instruction=instruction,
                     model=state["selected_model"],
                     source_language=source_lang,
                     target_language=target_lang,
-                    target_file=str(resolved_target) if resolved_target else None,
+                    target_file=(
+                        str(resolved_target)
+                        if resolved_target
+                        else None
+                    ),
                     operation=operation,
+                    create_backup=(
+                        operation != "create"
+                    ),
                 )
             )
+
             state["edit_response"] = response
 
             if not response.success:
-                state["result"] = f"Edit failed:\n{response.error}"
+                state["result"] = (
+                    f"Edit failed:\n{response.error}"
+                )
                 state["execution_success"] = False
                 return state
 
-            service.apply_edit(
-                response,
-                response.file_path,
-            )
+            try:
+                if operation == "create":
+                    service.create_file(
+                        response
+                    )
 
-            state["modified_file"] = response.file_path
-            state["result"] = (
-                "Successfully modified the file.\n\n"
-                + response.diff
-            )
-            state["execution_success"] = True
+                    state["modified_file"] = (
+                        response.output_file
+                    )
+
+                    state["result"] = (
+                        "Successfully created file:\n\n"
+                        f"{response.output_file}\n\n"
+                        + response.diff
+                    )
+
+                else:
+                    service.apply_edit(
+                        response,
+                        response.file_path,
+                    )
+
+                    state["modified_file"] = (
+                        response.file_path
+                    )
+
+                    state["result"] = (
+                        "Successfully modified the file.\n\n"
+                        + response.diff
+                    )
+
+                state["execution_success"] = True
+
+            except Exception as exc:
+                state["result"] = (
+                    f"Edit application failed: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                state["execution_success"] = False
+
             return state
 
         # --------------------------------------------------

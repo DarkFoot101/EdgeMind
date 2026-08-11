@@ -127,3 +127,39 @@ def restore_backup(file_path: str) -> None:
         )
 
     write_file(str(file), backup.read_text(encoding="utf-8"))
+
+def create_file(
+    file_path: str,
+    content: str,
+) -> None:
+    """
+    Create a new file inside the current project.
+    """
+
+    file = Path(
+        file_path
+    ).expanduser().resolve()
+
+    project_root = Path.cwd().resolve()
+
+    try:
+        file.relative_to(project_root)
+    except ValueError as exc:
+        raise ValueError(
+            "File path must be inside the current project."
+        ) from exc
+
+    if file.exists():
+        raise FileExistsError(
+            f"File already exists: {file}"
+        )
+
+    file.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    file.write_text(
+        content,
+        encoding="utf-8",
+    )

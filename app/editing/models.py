@@ -14,6 +14,7 @@ class EditRequest:
     model: str = "qwen2.5-coder:3b"
     source_language: str = "python"
     target_language: str = "python"
+    output_file: str | None = None 
     preserve_formatting: bool = True
     create_backup: bool = True
     validate_output: bool = True
@@ -21,7 +22,6 @@ class EditRequest:
     metadata: Optional[dict] = None
     target_file: Optional[str] = None
     operation: str = "modify"  # "modify" or "create"
-
 
 @dataclass
 class EditResponse:
@@ -35,3 +35,5 @@ class EditResponse:
     validation_message: str
     backup_path: str | None
     error: str | None
+    operation: str = "modify"
+    output_file: str | None = None
