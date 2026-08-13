@@ -9,6 +9,7 @@ Description-Content-Type: text/markdown
 Requires-Dist: ollama
 Requires-Dist: langgraph
 Requires-Dist: langchain
+Requires-Dist: pydantic>=2.0
 Requires-Dist: typer
 Requires-Dist: psutil
 

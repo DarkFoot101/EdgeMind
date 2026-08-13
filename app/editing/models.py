@@ -1,4 +1,4 @@
-"""Data models used by the editing subsystem."""
+"""Data models used by the editing subsystem in EdgeMind V2."""
 
 from dataclasses import dataclass
 from typing import Optional
@@ -14,14 +14,18 @@ class EditRequest:
     model: str = "qwen2.5-coder:3b"
     source_language: str = "python"
     target_language: str = "python"
-    output_file: str | None = None 
+    output_file: Optional[str] = None
     preserve_formatting: bool = True
     create_backup: bool = True
     validate_output: bool = True
     generate_diff: bool = True
     metadata: Optional[dict] = None
+    source_file: Optional[str] = None
     target_file: Optional[str] = None
     operation: str = "modify"  # "modify" or "create"
+    analysis_result: Optional[str] = None  # findings from prior analyze/search steps
+    project_path: str = "."
+
 
 @dataclass
 class EditResponse:
@@ -33,7 +37,8 @@ class EditResponse:
     modified_code: str
     diff: str
     validation_message: str
-    backup_path: str | None
-    error: str | None
+    backup_path: Optional[str]
+    error: Optional[str]
     operation: str = "modify"
-    output_file: str | None = None
+    output_file: Optional[str] = None
+    source_file: Optional[str] = None

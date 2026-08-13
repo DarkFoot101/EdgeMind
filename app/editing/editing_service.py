@@ -59,7 +59,8 @@ class EditingService:
                 )
 
             source_content = read_file(
-                str(source_path)
+                str(source_path),
+                project_path=request.project_path,
             )
 
             request.source_code = source_content
@@ -92,7 +93,8 @@ class EditingService:
 
                 if request.create_backup:
                     backup_path = backup_file(
-                        str(target_path)
+                        str(target_path),
+                        project_path=request.project_path,
                     )
 
             modified_code = modify_code(
@@ -169,6 +171,7 @@ class EditingService:
         self,
         response: EditResponse,
         file_path: str,
+        project_path: str = ".",
     ) -> bool:
         """
         Apply an approved edit or create a new file.
@@ -183,6 +186,7 @@ class EditingService:
             create_file(
                 str(target),
                 response.modified_code,
+                project_path=project_path,
             )
             return True
 
@@ -194,6 +198,7 @@ class EditingService:
         write_file(
             str(target),
             response.modified_code,
+            project_path=project_path,
         )
 
         return True
@@ -201,13 +206,15 @@ class EditingService:
     def rollback(
         self,
         file_path: str,
+        project_path: str = ".",
     ) -> bool:
         """
         Restore the previous backup.
         """
         try:
             restore_backup(
-                file_path
+                file_path,
+                project_path=project_path,
             )
             return True
         except (FileNotFoundError, OSError, ValueError):
@@ -216,6 +223,7 @@ class EditingService:
     def create_file(
         self,
         response: EditResponse,
+        project_path: str = ".",
     ) -> bool:
         """
         Create a new file from generated code.
@@ -232,6 +240,7 @@ class EditingService:
         create_file(
             response.output_file,
             response.modified_code,
+            project_path=project_path,
         )
 
         return True

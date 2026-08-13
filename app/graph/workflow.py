@@ -1,91 +1,70 @@
-# pyrefly: ignore [missing-import]
-from langgraph.graph import StateGraph
-# pyrefly: ignore [missing-import]
-from langgraph.graph import END
+"""
+EdgeMind LangGraph V2 Workflow Orchestration
 
+Assembles and compiles the full agentic execution graph:
+memory_lookup -> planner -> file_discovery -> plan_refinement -> task -> router -> executor -> reviewer -> evaluator -> memory -> advance -> finish
+"""
+
+from langgraph.graph import StateGraph, END
 from app.graph.state import EdgeMindState
-
 from app.graph.nodes import (
-    route_model,
-    execute_task,
-    get_current_task,
-    advance_step,
+    memory_lookup_node,
+    planner_node,
+    file_discovery_node,
+    plan_refinement_node,
+    get_current_task_node,
+    route_model_node,
+    execute_task_node,
+    reviewer_node,
+    evaluate_task_node,
+    retry_node,
+    memory_update_node,
+    advance_step_node,
     should_continue,
     should_continue_after_advance,
-    planner_node,
-    evaluate_task,
-    memory_update,
-    memory_lookup,
-    retry_node
 )
 
 graph = StateGraph(EdgeMindState)
 
-# creating the graph nodes
-graph.add_node(
-    "memory_lookup",
-    memory_lookup
-)
-graph.add_node(
-    "planner",
-    planner_node
-)
-graph.add_node(
-    "task",
-    get_current_task
-)
-graph.add_node(
-    "router",
-    route_model
-)
-graph.add_node(
-    "executor",
-    execute_task
-)
-graph.add_node(
-    'retry',
-    retry_node
-)
-graph.add_node(
-    "memory",
-    memory_update
-)
+# 1. Add operational graph nodes
+graph.add_node("memory_lookup", memory_lookup_node)
+graph.add_node("planner", planner_node)
+graph.add_node("file_discovery", file_discovery_node)
+graph.add_node("plan_refinement", plan_refinement_node)
+graph.add_node("task", get_current_task_node)
+graph.add_node("router", route_model_node)
+graph.add_node("executor", execute_task_node)
+graph.add_node("reviewer", reviewer_node)
+graph.add_node("evaluator", evaluate_task_node)
+graph.add_node("retry", retry_node)
+graph.add_node("memory", memory_update_node)
+graph.add_node("advance", advance_step_node)
 
-graph.add_node(
-    "advance",
-    advance_step
-)
-graph.add_node(
-    "evaluator",
-    evaluate_task
-)
-
-# set the entry point for the planner node
+# 2. Set entry point
 graph.set_entry_point("memory_lookup")
 
-# adding the edges
+# 3. Add deterministic edges
 graph.add_edge("memory_lookup", "planner")
-
-graph.add_edge("planner", "task")
-
+graph.add_edge("planner", "file_discovery")
+graph.add_edge("file_discovery", "plan_refinement")
+graph.add_edge("plan_refinement", "task")
 graph.add_edge("task", "router")
-
 graph.add_edge("router", "executor")
+graph.add_edge("executor", "reviewer")
+graph.add_edge("reviewer", "evaluator")
 
-graph.add_edge("executor", "evaluator")
-
+# 4. Add conditional retry/memory edges
 graph.add_conditional_edges(
     "evaluator",
     should_continue,
     {
         "retry": "retry",
         "continue": "memory",
-        "finish": END
-    }
+        "finish": END,
+    },
 )
 
 graph.add_edge("retry", "router")
-
 graph.add_edge("memory", "advance")
 
 graph.add_conditional_edges(
@@ -93,9 +72,9 @@ graph.add_conditional_edges(
     should_continue_after_advance,
     {
         "continue": "task",
-        "finish": END
-    }
+        "finish": END,
+    },
 )
 
-# compiling the graph 
+# 5. Compile workflow graph
 workflow = graph.compile()

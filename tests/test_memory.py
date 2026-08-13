@@ -1,49 +1,42 @@
-from app.memory.memory_manager import (
-    save_execution,
-    search_memory,
-)
+"""Pytest test suite for EdgeMind V2 SQLite Memory Subsystem."""
+
 from datetime import datetime
+from app.memory.memory_manager import save_execution, search_memory, get_recent_history
 
-def main():
 
-    print("=" * 60)
-    print("MEMORY TEST")
-    print("=" * 60)
-
+def test_sqlite_memory_persistence():
+    query_str = f"Test query at {datetime.now().isoformat()}"
     sample_state = {
-        "user_query": f"Analyze project at {datetime.now()}",
+        "user_query": query_str,
         "project_path": ".",
         "current_task": "analyze",
+        "file_path": "app/graph/planner.py",
+        "selected_model": "phi3:mini",
         "result": "Project analyzed successfully.",
         "execution_success": True,
     }
 
-    print("\nSaving execution...")
-
     save_execution(sample_state)
 
-    print("Saved successfully.\n")
-
-    print("Retrieving memory...\n")
-
     rows = search_memory(".")
+    assert len(rows) > 0
 
-    for index, row in enumerate(rows, start=1):
-
-        print(f"Memory #{index}")
-
-        print("Query :", row[0])
-
-        print("Task  :", row[1])
-
-        print("Result:", row[2])
-
-        print("Success:", bool(row[3]))
-
-        print("-" * 40)
-
-    print("\nMemory test completed.")
+    queries = [r[0] for r in rows]
+    assert query_str in queries
 
 
-if __name__ == "__main__":
-    main()
+def test_memory_result_truncation():
+    large_result = "A" * 5000
+    state = {
+        "user_query": "Large test",
+        "project_path": ".",
+        "current_task": "edit",
+        "result": large_result,
+        "execution_success": True,
+    }
+
+    save_execution(state)
+    rows = search_memory(".")
+    latest_result = rows[0][2]
+    assert len(latest_result) <= 2100
+    assert "...[truncated]" in latest_result
