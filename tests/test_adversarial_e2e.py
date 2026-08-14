@@ -27,9 +27,22 @@ from app.editing.validator import validate_code
 from app.graph.workflow import workflow
 
 
+def _is_ollama_available() -> bool:
+    try:
+        import urllib.request
+        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1):
+            return True
+    except Exception:
+        return False
+
+
 # -----------------------------------------------------------------------------
 # 1. Python Project Adversarial Execution
 # -----------------------------------------------------------------------------
+@pytest.mark.skipif(
+    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/python-project/algorithms.py").is_file(),
+    reason="Requires live Ollama service and external python-project algorithms.py fixture",
+)
 def test_real_python_project_flow():
     project_dir = Path("/tmp/edgemind-adversarial-tests/python-project").resolve()
     assert project_dir.is_dir()
@@ -53,6 +66,10 @@ def test_real_python_project_flow():
     assert valid is True, f"Generated Python syntax invalid: {msg}"
 
 
+@pytest.mark.skipif(
+    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/python-project/algorithms.py").is_file(),
+    reason="Requires live Ollama service and external python-project algorithms.py fixture",
+)
 def test_python_create_vs_modify():
     project_dir = Path("/tmp/edgemind-adversarial-tests/python-project").resolve()
     alg_py = project_dir / "algorithms.py"
@@ -85,6 +102,10 @@ def test_python_create_vs_modify():
 # -----------------------------------------------------------------------------
 # 2. Java & Java -> Python Conversion Execution
 # -----------------------------------------------------------------------------
+@pytest.mark.skipif(
+    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/java-project/BadAlgorithm.java").is_file(),
+    reason="Requires live Ollama service and external java-project BadAlgorithm.java fixture",
+)
 def test_real_java_to_python_conversion():
     project_dir = Path("/tmp/edgemind-adversarial-tests/java-project").resolve()
     java_file = project_dir / "BadAlgorithm.java"
@@ -121,6 +142,10 @@ def test_real_java_to_python_conversion():
 # -----------------------------------------------------------------------------
 # 3. JavaScript Project Real Execution
 # -----------------------------------------------------------------------------
+@pytest.mark.skipif(
+    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/javascript-project/buggy.js").is_file(),
+    reason="Requires live Ollama service and external javascript-project buggy.js fixture",
+)
 def test_real_javascript_project_flow():
     project_dir = Path("/tmp/edgemind-adversarial-tests/javascript-project").resolve()
     js_file = project_dir / "buggy.js"
@@ -143,13 +168,13 @@ def test_real_javascript_project_flow():
 # -----------------------------------------------------------------------------
 # 4. Autonomous File Discovery & Exclusions
 # -----------------------------------------------------------------------------
-def test_file_discovery_excludes_internal_dirs():
-    project_dir = Path("/tmp/edgemind-adversarial-tests/python-project").resolve()
-    
+def test_file_discovery_excludes_internal_dirs(tmp_path):
+    project_dir = tmp_path
+
     # Create fake internal directories
-    (project_dir / ".git").mkdir(exist_ok=True)
+    (project_dir / ".git").mkdir(parents=True, exist_ok=True)
     (project_dir / ".git" / "fake.py").write_text("def fake(): pass", encoding="utf-8")
-    (project_dir / ".venv").mkdir(exist_ok=True)
+    (project_dir / ".venv").mkdir(parents=True, exist_ok=True)
     (project_dir / ".venv" / "lib.py").write_text("def lib(): pass", encoding="utf-8")
 
     from app.tools.file_discovery import search_project_files, resolve_best_file
@@ -168,8 +193,8 @@ def test_file_discovery_excludes_internal_dirs():
 # -----------------------------------------------------------------------------
 # 5. Security & Isolation Verification
 # -----------------------------------------------------------------------------
-def test_security_path_traversal_rejection():
-    project_dir = Path("/tmp/edgemind-adversarial-tests/python-project").resolve()
+def test_security_path_traversal_rejection(tmp_path):
+    project_dir = tmp_path
 
     # Attempt path traversal outside project root
     with pytest.raises(ValueError) as exc:

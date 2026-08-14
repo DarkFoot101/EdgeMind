@@ -52,6 +52,7 @@ edgemind.egg-info/dependency_links.txt
 edgemind.egg-info/entry_points.txt
 edgemind.egg-info/requires.txt
 edgemind.egg-info/top_level.txt
+tests/test_adversarial_e2e.py
 tests/test_agent_workflow.py
 tests/test_editing.py
 tests/test_file_manager.py

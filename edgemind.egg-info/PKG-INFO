@@ -419,50 +419,44 @@ The project investigates:
 
 > **Can autonomous software engineering agents intelligently perform development workflows without relying on cloud infrastructure?**
 ---
-# ⚙️ Installation
+# ⚙️ Installation & Setup
 
-## Clone the Repository
+## Install via PyPI
+
+Install the official package directly into your project virtual environment:
 
 ```bash
-git clone https://github.com/your-username/EdgeMind.git
+pip install edgemind
+```
+
+To upgrade an existing installation to the latest version:
+
+```bash
+pip install -U edgemind
+```
+
+Once installed, launch the interactive CLI shell from any project directory:
+
+```bash
+edgemind
+```
+
+---
+
+## Install from Source
+
+```bash
+git clone https://github.com/Akhilesh-Venkiteswaran/EdgeMind.git
 cd EdgeMind
-```
-
----
-
-## Create a Virtual Environment
-
-EdgeMind uses **uv** for dependency management.
-
-```bash
-uv venv
-```
-
-Activate the environment.
-
-### macOS / Linux
-
-```bash
-source .venv/bin/activate
-```
-
-### Windows
-
-```powershell
-.venv\Scripts\activate
-```
-
----
-
-## Install Dependencies
-
-```bash
-uv pip install -r requirements.txt
+python3 -m venv venv
+source venv/bin/activate
+pip install -e .
 ```
 
 ---
 
 ## Install Ollama
+
 
 Download Ollama from:
 
