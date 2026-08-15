@@ -183,13 +183,13 @@ def clean_planner_json(raw_text: str) -> str:
     if open_braces > 0:
         text += "}" * open_braces
 
-    # 8. Attempt ast.literal_eval and quote normalization if standard json parse fails
+    # 8. Attempt quote normalization and ast.literal_eval if standard json parse fails
     try:
         json.loads(text)
         return text.strip()
     except Exception:
-        text_fixed = re.sub(r"'(?=[a-zA-Z0-9_]+\s*':)", '"', text)
-        text_fixed = re.sub(r"(?<=\{\s*)'|(?<=,\s*)'", '"', text_fixed)
+        text_fixed = re.sub(r"([{\s,])'([a-zA-Z0-9_]+)'\s*:", r'\1"\2":', text)
+        text_fixed = re.sub(r":\s*'([^']*)'", r': "\1"', text_fixed)
         try:
             json.loads(text_fixed)
             return text_fixed.strip()
@@ -360,8 +360,8 @@ Please correct your output. Return ONLY a valid JSON object matching:
             plan = Plan.model_validate_json(cleaned_retry)
             return sanitize_plan_tasks(plan, user_query, active_file)
         except Exception as retry_exc:
-            print(f"\nPlanner V2 fallback applied: {retry_exc}")
-            default_tool = "edit" if any(w in user_query.lower() for w in ["fix", "modify", "update", "convert", "create"]) else "analyze"
+            is_deploy_query = any(w in user_query.lower() for w in ["docker", "dockerfile", "compose", "requirements", "deploy", "container"])
+            default_tool = "deployment" if is_deploy_query else ("edit" if any(w in user_query.lower() for w in ["fix", "modify", "update", "convert", "create"]) else "analyze")
             fallback_task = Task(
                 tool=default_tool,
                 operation="create" if "convert" in user_query.lower() or "create" in user_query.lower() else "modify",

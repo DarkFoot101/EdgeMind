@@ -284,6 +284,8 @@ def test_security_path_traversal_rejection(tmp_path):
 # -----------------------------------------------------------------------------
 # 6. Deployment Routing Isolation
 # -----------------------------------------------------------------------------
+@pytest.mark.ollama
+@pytest.mark.integration
 def test_deployment_routing_isolation():
     from app.graph.planner import create_plan
 

@@ -313,6 +313,11 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                         state["execution_success"] = False
                         return state
 
+                    if resolved_target.exists():
+                        operation = "modify"
+                        src_path = resolved_target
+                        resolved_target = None
+
             edit_req = EditRequest(
                 file_path=str(src_path) if src_path else str(project_root),
                 instruction=state.get("task_instruction") or state["user_query"],
