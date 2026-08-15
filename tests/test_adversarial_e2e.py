@@ -27,22 +27,98 @@ from app.editing.validator import validate_code
 from app.graph.workflow import workflow
 
 
-def _is_ollama_available() -> bool:
-    try:
-        import urllib.request
-        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1):
-            return True
-    except Exception:
-        return False
+@pytest.fixture(autouse=True)
+def setup_adversarial_projects():
+    """
+    Hermetically provisions clean, isolated project directories in /tmp/edgemind-adversarial-tests/
+    before every test and cleans up generated target artifacts after.
+    """
+    base_dir = Path("/tmp/edgemind-adversarial-tests")
+
+    # 1. Python Project
+    py_dir = base_dir / "python-project"
+    py_dir.mkdir(parents=True, exist_ok=True)
+    (py_dir / "algorithms.py").write_text(
+        "def compute_fibonacci(n):\n"
+        "    # Inefficient exponential recursive algorithm and bad edge case handling\n"
+        "    if n <= 0:\n"
+        "        return 0\n"
+        "    if n == 1:\n"
+        "        return 1\n"
+        "    return compute_fibonacci(n - 1) + compute_fibonacci(n - 2)\n\n"
+        "def process_items(items):\n"
+        "    # Contains bad variable names, off-by-one error, and division by zero risk\n"
+        "    x_tmp_var_val = 0\n"
+        "    for i in range(len(items) + 1):\n"
+        "        val = items[i]\n"
+        "        x_tmp_var_val += val / (val - val)\n"
+        "    return x_tmp_var_val\n",
+        encoding="utf-8",
+    )
+    # 2. Java Project
+    java_dir = base_dir / "java-project"
+    java_dir.mkdir(parents=True, exist_ok=True)
+    (java_dir / "BadAlgorithm.java").write_text(
+        "public class BadAlgorithm {\n"
+        "    public int fibonacci(int n) {\n"
+        "        if (n <= 1) return n;\n"
+        "        return fibonacci(n - 1) + fibonacci(n - 2);\n"
+        "    }\n\n"
+        "    public int sumArray(int[] numbers) {\n"
+        "        int total = 0;\n"
+        "        for (int i = 0; i <= numbers.length; i++) {\n"
+        "            total += numbers[i];\n"
+        "        }\n"
+        "        return total;\n"
+        "    }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    # 3. JavaScript Project
+    js_dir = base_dir / "javascript-project"
+    js_dir.mkdir(parents=True, exist_ok=True)
+    (js_dir / "buggy.js").write_text(
+        "function calculateTotal(items) {\n"
+        "    let total = 0;\n"
+        "    for (let i = 0; i <= items.length; i++) {\n"
+        "        total += items[i];\n"
+        "    }\n"
+        "    return total;\n"
+        "}\n\n"
+        "function fibonacci(n) {\n"
+        "    if (n <= 1) return n;\n"
+        "    return fibonacci(n - 1) + fibonacci(n - 2);\n"
+        "}\n\n"
+        "module.exports = { calculateTotal, fibonacci };\n",
+        encoding="utf-8",
+    )
+
+    def _clean_dir(d: Path, keep_file: str):
+        if d.is_dir():
+            for item in d.glob("*"):
+                if item.name != keep_file:
+                    if item.is_file() or item.is_symlink():
+                        item.unlink()
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+
+    _clean_dir(py_dir, "algorithms.py")
+    _clean_dir(java_dir, "BadAlgorithm.java")
+    _clean_dir(js_dir, "buggy.js")
+
+    yield
+
+    _clean_dir(py_dir, "algorithms.py")
+    _clean_dir(java_dir, "BadAlgorithm.java")
+    _clean_dir(js_dir, "buggy.js")
 
 
 # -----------------------------------------------------------------------------
-# 1. Python Project Adversarial Execution
+# 1. Python Project Adversarial Execution (Live Ollama Integration)
 # -----------------------------------------------------------------------------
-@pytest.mark.skipif(
-    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/python-project/algorithms.py").is_file(),
-    reason="Requires live Ollama service and external python-project algorithms.py fixture",
-)
+@pytest.mark.ollama
+@pytest.mark.integration
 def test_real_python_project_flow():
     project_dir = Path("/tmp/edgemind-adversarial-tests/python-project").resolve()
     assert project_dir.is_dir()
@@ -66,10 +142,8 @@ def test_real_python_project_flow():
     assert valid is True, f"Generated Python syntax invalid: {msg}"
 
 
-@pytest.mark.skipif(
-    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/python-project/algorithms.py").is_file(),
-    reason="Requires live Ollama service and external python-project algorithms.py fixture",
-)
+@pytest.mark.ollama
+@pytest.mark.integration
 def test_python_create_vs_modify():
     project_dir = Path("/tmp/edgemind-adversarial-tests/python-project").resolve()
     alg_py = project_dir / "algorithms.py"
@@ -100,12 +174,10 @@ def test_python_create_vs_modify():
 
 
 # -----------------------------------------------------------------------------
-# 2. Java & Java -> Python Conversion Execution
+# 2. Java & Java -> Python Conversion Execution (Live Ollama Integration)
 # -----------------------------------------------------------------------------
-@pytest.mark.skipif(
-    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/java-project/BadAlgorithm.java").is_file(),
-    reason="Requires live Ollama service and external java-project BadAlgorithm.java fixture",
-)
+@pytest.mark.ollama
+@pytest.mark.integration
 def test_real_java_to_python_conversion():
     project_dir = Path("/tmp/edgemind-adversarial-tests/java-project").resolve()
     java_file = project_dir / "BadAlgorithm.java"
@@ -140,12 +212,10 @@ def test_real_java_to_python_conversion():
 
 
 # -----------------------------------------------------------------------------
-# 3. JavaScript Project Real Execution
+# 3. JavaScript Project Real Execution (Live Ollama Integration)
 # -----------------------------------------------------------------------------
-@pytest.mark.skipif(
-    not _is_ollama_available() or not Path("/tmp/edgemind-adversarial-tests/javascript-project/buggy.js").is_file(),
-    reason="Requires live Ollama service and external javascript-project buggy.js fixture",
-)
+@pytest.mark.ollama
+@pytest.mark.integration
 def test_real_javascript_project_flow():
     project_dir = Path("/tmp/edgemind-adversarial-tests/javascript-project").resolve()
     js_file = project_dir / "buggy.js"

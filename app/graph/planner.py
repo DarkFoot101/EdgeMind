@@ -171,8 +171,11 @@ def clean_planner_json(raw_text: str) -> str:
     # 6. Remove trailing commas in objects and arrays before closing brace/bracket
     text = re.sub(r",\s*([\}\]])", r"\1", text)
 
-    # 7. Auto-repair unclosed arrays/objects if truncated
+    # 7. Auto-repair unclosed string quotes and unclosed arrays/objects if truncated by LLM
     text = text.rstrip(" \t\n\r,:")
+    if text.count('"') % 2 != 0:
+        text += '"'
+
     open_braces = text.count("{") - text.count("}")
     open_brackets = text.count("[") - text.count("]")
     if open_brackets > 0:
@@ -180,18 +183,24 @@ def clean_planner_json(raw_text: str) -> str:
     if open_braces > 0:
         text += "}" * open_braces
 
-    # 8. Attempt ast.literal_eval if standard json parse fails due to single quotes
+    # 8. Attempt ast.literal_eval and quote normalization if standard json parse fails
     try:
         json.loads(text)
         return text.strip()
     except Exception:
-        import ast
+        text_fixed = re.sub(r"'(?=[a-zA-Z0-9_]+\s*':)", '"', text)
+        text_fixed = re.sub(r"(?<=\{\s*)'|(?<=,\s*)'", '"', text_fixed)
         try:
-            val = ast.literal_eval(text)
-            if isinstance(val, dict):
-                return json.dumps(val)
+            json.loads(text_fixed)
+            return text_fixed.strip()
         except Exception:
-            pass
+            import ast
+            try:
+                val = ast.literal_eval(text)
+                if isinstance(val, dict):
+                    return json.dumps(val)
+            except Exception:
+                pass
 
     return text.strip()
 
@@ -209,7 +218,11 @@ def sanitize_plan_tasks(plan: Plan, user_query: str, active_file: str = "") -> l
         kw in query_lower for kw in ["docker", "dockerfile", "compose", "requirements", "deploy", "container"]
     )
 
-    valid_tools = {"analyze", "search", "edit", "debug", "explain", "deployment", "test", "verify", "translate"}
+    valid_tools = {
+        "analyze", "search", "edit", "debug", "explain", "deployment",
+        "test", "verify", "translate", "create", "modify", "refactor",
+        "optimize", "fix", "convert"
+    }
     valid_ops = {"inspect", "search", "analyze", "modify", "create", "test", "verify"}
 
     sanitized_tasks = []
@@ -227,7 +240,7 @@ def sanitize_plan_tasks(plan: Plan, user_query: str, active_file: str = "") -> l
         if tool in {"test", "verify"}:
             tool = "debug" if tool == "test" else "analyze"
             task_dict["tool"] = tool
-        elif tool == "translate":
+        elif tool in {"translate", "create", "modify", "refactor", "optimize", "fix", "convert"}:
             tool = "edit"
             task_dict["tool"] = tool
 
@@ -247,6 +260,12 @@ def sanitize_plan_tasks(plan: Plan, user_query: str, active_file: str = "") -> l
             task_dict["instruction"] = user_query
 
         sanitized_tasks.append(task_dict)
+
+    is_create_intent = any(w in query_lower for w in ["create", "new file", "convert", "generate a new"])
+    if is_create_intent:
+        for task_dict in sanitized_tasks:
+            if task_dict.get("tool") == "edit":
+                task_dict["operation"] = "create"
 
     is_edit_query = any(w in query_lower for w in ["fix", "modify", "update", "convert", "create", "optimize", "clean", "correct", "change", "refactor", "solve", "problem", "bug"])
     has_edit_task = any(t.get("tool") == "edit" for t in sanitized_tasks)

@@ -14,6 +14,7 @@ Defines all operational nodes for EdgeMind V2 workflow execution:
 - Step Advancement
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -131,19 +132,49 @@ def plan_refinement_node(state: EdgeMindState) -> EdgeMindState:
     refined_plan = []
     for item in plan:
         task_dict = dict(item)
-        if not task_dict.get("source_file"):
+        task_src = task_dict.get("source_file")
+        if task_src:
+            task_src_path = _resolve_in_project(task_src, project_path)
+            if not task_src_path or not task_src_path.exists():
+                task_dict["source_file"] = source_file
+        else:
             task_dict["source_file"] = source_file
         if not task_dict.get("source_language"):
             task_dict["source_language"] = source_lang
         if not task_dict.get("target_language"):
             task_dict["target_language"] = target_lang
 
-        if task_dict.get("operation") == "create" and not task_dict.get("target_file"):
-            if source_file:
-                src_path = Path(source_file)
-                ext_map = {"python": ".py", "java": ".java", "cpp": ".cpp", "javascript": ".js", "typescript": ".ts"}
-                new_ext = ext_map.get(target_lang, src_path.suffix)
-                task_dict["target_file"] = str(src_path.with_suffix(new_ext))
+        is_create_intent = any(w in state.get("user_query", "").lower() for w in ["create", "new file", "convert", "generate a new"])
+        if is_create_intent and task_dict.get("tool") == "edit":
+            task_dict["operation"] = "create"
+
+        if task_dict.get("operation") == "create":
+            tgt = task_dict.get("target_file")
+            if not tgt or (source_file and Path(tgt).name == Path(source_file).name):
+                target_cand = None
+                if state.get("user_query"):
+                    file_tokens = re.findall(r"[\w./\\-]+\.[A-Za-z0-9]+", state["user_query"])
+                    for tok in file_tokens:
+                        tok_clean = tok.strip("'\" ")
+                        if source_file and Path(tok_clean).name != Path(source_file).name:
+                            target_cand = tok_clean
+                            break
+
+                if target_cand:
+                    task_dict["target_file"] = target_cand
+                elif source_file:
+                    src_path = Path(source_file)
+                    ext_map = {"python": ".py", "java": ".java", "cpp": ".cpp", "javascript": ".js", "typescript": ".ts"}
+                    new_ext = ext_map.get(target_lang, src_path.suffix)
+                    cand_name = f"{src_path.stem}_v2{new_ext}" if new_ext == src_path.suffix else f"{src_path.stem}{new_ext}"
+        if task_dict.get("target_file"):
+            tgt_path = Path(task_dict["target_file"])
+            project_root = Path(project_path).expanduser().resolve()
+            resolved_tgt = tgt_path if tgt_path.is_absolute() else (project_root / tgt_path).resolve()
+            try:
+                resolved_tgt.relative_to(project_root)
+            except ValueError:
+                task_dict["target_file"] = str(project_root / tgt_path.name)
 
         refined_plan.append(task_dict)
 

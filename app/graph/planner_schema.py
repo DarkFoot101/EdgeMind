@@ -18,6 +18,12 @@ class Task(BaseModel):
             "test",
             "verify",
             "translate",
+            "create",
+            "modify",
+            "refactor",
+            "optimize",
+            "fix",
+            "convert",
         ]
     ] = Field(default="edit", description="The primary tool to execute")
 

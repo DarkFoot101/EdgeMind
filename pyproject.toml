@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edgemind"
-version = "1.0.0"
+version = "1.0.1"
 description = "Resource-Aware Agentic Coding Assistant for Local AI Software Engineering"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,3 +29,9 @@ edgemind = "app.cli.interactive:run"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "ollama: marks integration tests requiring a live Ollama server and local models",
+    "integration: marks integration tests requiring external runtime dependencies",
+]
