@@ -1,16 +1,18 @@
 """
-Environment checks for EdgeMind V2.
+Environment and Model checks for EdgeMind V2.1.
 """
 
 import shutil
 import sqlite3
 import subprocess
 from pathlib import Path
+from typing import List
 
 import ollama
 
+from app.models.model_manager import ModelManager
 from app.resources.system_monitor import get_system_resources
-from app.setup.models import REQUIRED_MODELS
+from app.setup.models import DEFAULT_CODING_MODEL
 
 
 def check_python() -> bool:
@@ -19,7 +21,7 @@ def check_python() -> bool:
 
 def check_ram() -> bool:
     resources = get_system_resources()
-    return resources["ram_available_gb"] >= 4.0
+    return resources.get("ram_available_gb", 8.0) >= 4.0
 
 
 def check_disk() -> bool:
@@ -38,11 +40,7 @@ def check_sqlite() -> bool:
 
 
 def check_ollama() -> bool:
-    try:
-        ollama.list()
-        return True
-    except Exception:
-        return False
+    return ModelManager.is_ollama_running()
 
 
 def start_ollama() -> bool:
@@ -57,35 +55,23 @@ def start_ollama() -> bool:
         return False
 
 
-def installed_models() -> list[str]:
-    try:
-        response = ollama.list()
-        names = []
-        models_list = getattr(response, "models", None) or response.get("models", [])
-        for item in models_list:
-            if hasattr(item, "model"):
-                names.append(item.model)
-            elif isinstance(item, dict) and "name" in item:
-                names.append(item["name"])
-            elif isinstance(item, dict) and "model" in item:
-                names.append(item["model"])
-        return names
-    except Exception:
+def installed_models() -> List[str]:
+    return ModelManager.list_installed_models()
+
+
+def has_suitable_coding_model() -> bool:
+    """Return True if any compatible local coding model is installed."""
+    return len(ModelManager.list_installed_models()) > 0
+
+
+def missing_models() -> List[str]:
+    """
+    If no local model is installed, returns the recommended fallback model list.
+    If compatible local models already exist, returns empty list.
+    """
+    installed = ModelManager.list_installed_models()
+    if installed:
         return []
 
-
-def missing_models() -> list[str]:
-    installed = installed_models()
-    missing = []
-    for required in REQUIRED_MODELS:
-        # Match required string prefix (e.g., phi3:mini matches phi3:mini:latest or phi3:mini)
-        req_clean = required.split(":")[0] + ":" + required.split(":")[1] if ":" in required else required
-        found = False
-        for inst in installed:
-            if inst == required or inst.startswith(req_clean):
-                found = True
-                break
-        if not found:
-            missing.append(required)
-
-    return missing
+    recommended_model, _ = ModelManager.recommend_default_model()
+    return [recommended_model or DEFAULT_CODING_MODEL]

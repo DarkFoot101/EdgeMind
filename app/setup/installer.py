@@ -1,9 +1,12 @@
 """
-EdgeMind Setup Wizard
+EdgeMind V2.1 Setup Wizard
 """
 
+import shutil
+import time
 import ollama
 
+from app.models.model_manager import ModelManager
 from app.setup.checks import (
     check_ram,
     check_disk,
@@ -15,113 +18,82 @@ from app.setup.checks import (
 
 
 def run_setup():
+    print("\n" + "=" * 60)
+    print("EdgeMind V2.1 Setup Wizard")
+    print("=" * 60 + "\n")
 
-    print()
-
-    print("=" * 60)
-
-    print("EdgeMind First Time Setup")
-
-    print("=" * 60)
-
-    print()
+    print("Checking Python environment...")
+    print("✓ Python detected")
 
     print("Checking RAM...")
-
-    print("✓ OK" if check_ram() else "✗ Low RAM")
+    print("✓ Available RAM >= 4GB" if check_ram() else "✗ Low RAM (requires >= 4GB)")
 
     print("Checking Disk...")
-
-    print("✓ OK" if check_disk() else "✗ Low Disk Space")
+    print("✓ Free Disk Space >= 5GB" if check_disk() else "✗ Low Disk Space (requires >= 5GB)")
 
     print("Checking SQLite...")
+    print("✓ SQLite operational" if check_sqlite() else "✗ SQLite Error")
 
-    print("✓ OK" if check_sqlite() else "✗ SQLite Error")
+    print("\nChecking Ollama...")
+    if not shutil.which("ollama"):
+        print("✗ Ollama binary not found. Please install Ollama from https://ollama.com")
+        return
 
-    print()
-
-    print("Checking Ollama...")
+    print("✓ Ollama detected")
 
     if check_ollama():
-
-        print("✓ Running")
-
+        print("✓ Ollama running")
     else:
-
-        print("✗ Not Running")
-
-        answer = input(
-
-            "Start Ollama now? (Y/N): "
-
-        ).lower()
-
-        if answer == "y":
-
+        print("✗ Ollama not running")
+        answer = input("Start Ollama now? (Y/N): ").strip().lower()
+        if answer in {"y", "yes"}:
             if start_ollama():
-
-                print("✓ Ollama Started")
-
+                print("Starting Ollama", end="", flush=True)
+                for _ in range(10):
+                    time.sleep(1)
+                    print(".", end="", flush=True)
+                    if check_ollama():
+                        print(" ✓ Running!")
+                        break
+                else:
+                    print("\nOllama taking long to start. Please run 'ollama serve' in terminal.")
+                    return
             else:
-
-                print("Could not start Ollama.")
-
-                print("Run: ollama serve")
-
+                print("Unable to start Ollama automatically. Run: ollama serve")
                 return
-
         else:
-
             return
 
     print()
-
-    missing = missing_models()
-
-    if not missing:
-
-        print("✓ All models installed")
-
+    installed = ModelManager.list_installed_models()
+    if installed:
+        print("Detected local Ollama models:")
+        for m in installed:
+            print(f"  ✓ {m}")
+        rec_model = ModelManager.select_best_model("edit")
+        print(f"\nSelected active coding model: {rec_model}")
+        print("No additional model download required.")
     else:
+        rec_model, size_est = ModelManager.recommend_default_model()
+        print("No compatible coding model found.")
+        print("Recommended model:")
+        print(f"  {rec_model}")
+        print(f"Model size: {size_est}")
 
-        print("Missing Models:\n")
+        answer = input("\nDownload model? [Y/n]: ").strip().lower()
+        if answer in {"", "y", "yes"}:
+            print(f"Downloading {rec_model}...")
+            try:
+                ollama.pull(rec_model)
+                print(f"✓ Successfully installed {rec_model}")
+            except Exception as exc:
+                print(f"✗ Failed to download {rec_model}: {exc}")
+                return
+        else:
+            print("Model setup cancelled.")
+            return
 
-        for model in missing:
-
-            print(model)
-
-        print()
-
-        answer = input(
-
-            "Download them now? (Y/N): "
-
-        ).lower()
-
-        if answer == "y":
-
-            for model in missing:
-
-                print(f"Downloading {model}...")
-
-                ollama.pull(model)
-
-                print("✓ Done")
-
-    print()
-
-    print("=" * 60)
-
-    print("Setup Complete!")
-
-    print()
-
-    print("Run")
-
-    print()
-
-    print("edgemind")
-
-    print()
-
-    print("=" * 60)
+    print("\n" + "=" * 60)
+    print("Setup Complete! You can now start EdgeMind:")
+    print("  edgemind")
+    print("=" * 60 + "\n")

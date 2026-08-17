@@ -1,13 +1,13 @@
 """
-EdgeMind Autonomous File Discovery Tool
+EdgeMind V2.1 Autonomous File Discovery Tool
 
-Searches and ranks project files based on user query, intent,
-keywords, symbols, or relative file patterns.
-Strictly respects project root security boundaries.
+Searches, ranks, and resolves project files based on query, context, and intent.
+Strictly respects project root security boundaries and excludes backup/internal directories.
 """
 
 from pathlib import Path
 import re
+from typing import Optional
 
 IGNORED_DIRS = {
     ".git",
@@ -37,6 +37,7 @@ IGNORED_EXTENSIONS = {
     ".zip",
     ".tar",
     ".gz",
+    ".bak",
 }
 
 
@@ -67,8 +68,8 @@ def search_project_files(
         if not path.is_file():
             continue
 
-        # Check ignored directories
-        if any(ignored in path.parts for ignored in IGNORED_DIRS):
+        # Check ignored directories & backup filenames
+        if any(ignored in path.parts for ignored in IGNORED_DIRS) or path.name.endswith(".bak"):
             continue
 
         # Check ignored extensions
@@ -77,7 +78,6 @@ def search_project_files(
 
         score = 0
         rel_path_str = str(path.relative_to(project_root)).replace("\\", "/")
-        file_stem = path.stem.lower()
         file_name = path.name.lower()
 
         # Score matching exact file token
@@ -130,41 +130,63 @@ def resolve_best_file(
 ) -> str | None:
     """
     Determine the single best file candidate for a query.
-    If query uses pronoun/continuation without new file specification, returns active_file.
+    Prioritizes pronoun/continuation references and active_file before blind filesystem search.
+    Guarantees backups (.bak, .edgemind/backups) are NEVER returned.
     """
     project_root = Path(project_path).resolve()
+    query_lower = (query or "").lower()
 
-    # Direct filename check in query
+    # 1. Pronoun and continuation resolution from active context
+    words = set(re.findall(r"\b\w+\b", query_lower))
+    pronouns = {"it", "that", "file", "code", "optimize", "fix", "again", "changed", "what", "undo", "explain"}
+    has_pronouns = not words.isdisjoint(pronouns)
     file_tokens = re.findall(r"[\w./\\-]+\.[A-Za-z0-9]+", query)
+
+    # If query uses pronouns without specifying a brand new filename, return active_file if valid
+    if has_pronouns and not file_tokens and active_file:
+        active_path = Path(active_file)
+        if not active_path.is_absolute():
+            active_path = (project_root / active_path).resolve()
+        if active_path.exists() and active_path.is_file():
+            if not any(ignored in active_path.parts for ignored in IGNORED_DIRS) and not active_path.name.endswith(".bak"):
+                return str(active_path)
+
+    # 2. Direct filename match in query
     if file_tokens:
         for token in file_tokens:
             token_clean = token.strip("'\" ")
             candidate = project_root / token_clean
             if candidate.exists() and candidate.is_file():
-                if not any(ignored in candidate.parts for ignored in IGNORED_DIRS):
+                if not any(ignored in candidate.parts for ignored in IGNORED_DIRS) and not candidate.name.endswith(".bak"):
                     return str(candidate.resolve())
 
             # Check rglob match for basename
             search_name = Path(token_clean).name
             for match in project_root.rglob(search_name):
-                if match.is_file() and not any(ignored in match.parts for ignored in IGNORED_DIRS):
+                if match.is_file() and not any(ignored in match.parts for ignored in IGNORED_DIRS) and not match.name.endswith(".bak"):
                     return str(match.resolve())
 
-    # Check search candidates
+    # 3. Search candidates in project
     candidates = search_project_files(query, project_path, limit=5)
     if candidates:
-        return str((project_root / candidates[0]).resolve())
+        cand_path = (project_root / candidates[0]).resolve()
+        if cand_path.exists() and not cand_path.name.endswith(".bak"):
+            return str(cand_path)
 
-    # Fallback to active file if available
-    if active_file and Path(active_file).exists():
-        return str(Path(active_file).resolve())
+    # 4. Fallback to active file if available
+    if active_file:
+        act_p = Path(active_file)
+        if not act_p.is_absolute():
+            act_p = (project_root / act_p).resolve()
+        if act_p.exists() and not act_p.name.endswith(".bak") and not any(ignored in act_p.parts for ignored in IGNORED_DIRS):
+            return str(act_p)
 
-    # Fallback: find any primary source code file in project root
+    # 5. Fallback: find primary source code file in project root
     source_exts = {".py", ".java", ".js", ".ts", ".cpp", ".c", ".go", ".rs"}
     all_source_files = []
     for path in project_root.rglob("*"):
         if path.is_file() and path.suffix.lower() in source_exts:
-            if not any(ignored in path.parts for ignored in IGNORED_DIRS):
+            if not any(ignored in path.parts for ignored in IGNORED_DIRS) and not path.name.endswith(".bak"):
                 is_test = "test" in path.name.lower() or "tests" in path.parts
                 all_source_files.append((0 if not is_test else 1, path))
 

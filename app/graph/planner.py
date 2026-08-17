@@ -141,66 +141,67 @@ JSON:
 
 def clean_planner_json(raw_text: str) -> str:
     """
-    Strips markdown code fences, trailing comments, trailing commas, and repairs unclosed JSON structures in LLM JSON output.
+    Cleans raw LLM planner response text into strictly valid JSON.
+    Handles markdown codeblocks, inline comments, unescaped quotes, and trailing comma artifacts.
     """
+    if not raw_text or not raw_text.strip():
+        return '{"tasks": []}'
+
     text = raw_text.strip()
 
-    # 1. Remove markdown code block wrappers
+    # 1. Strip markdown codeblocks
     if "```" in text:
         match = re.search(r"```(?:json)?\s*(.*?)(?:```|$)", text, re.DOTALL | re.IGNORECASE)
         if match:
             text = match.group(1).strip()
 
-    # 2. Locate starting '{'
+    # 2. Extract root JSON object bounds
     first_brace = text.find("{")
-    if first_brace != -1:
-        text = text[first_brace:]
-
-    # 3. Extract complete root JSON object if end brace exists
     last_brace = text.rfind("}")
-    if last_brace != -1 and last_brace > first_brace:
-        text = text[: last_brace + 1]
+    if first_brace != -1 and last_brace > first_brace:
+        text = text[first_brace : last_brace + 1]
 
-    # 4. Remove inline JS comments (// ...) and block comments (/* ... */)
+    # 3. Clean inline/block comments
     text = re.sub(r"//.*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
 
-    # 5. Clean trailing single/double quote artifacts before double quotes (e.g. "path.py'" -> "path.py")
+    # 4. Fix trailing quotes and trailing commas
     text = re.sub(r"'+\s*\"", '"', text)
+    text = re.sub(r",\s*([\}])", r"\1", text)
 
-    # 6. Remove trailing commas in objects and arrays before closing brace/bracket
-    text = re.sub(r",\s*([\}\]])", r"\1", text)
-
-    # 7. Auto-repair unclosed string quotes and unclosed arrays/objects if truncated by LLM
-    text = text.rstrip(" \t\n\r,:")
-    if text.count('"') % 2 != 0:
-        text += '"'
-
-    open_braces = text.count("{") - text.count("}")
-    open_brackets = text.count("[") - text.count("]")
-    if open_brackets > 0:
-        text += "]" * open_brackets
-    if open_braces > 0:
-        text += "}" * open_braces
-
-    # 8. Attempt quote normalization and ast.literal_eval if standard json parse fails
+    # 5. Fast path: try standard json.loads
     try:
         json.loads(text)
         return text.strip()
     except Exception:
-        text_fixed = re.sub(r"([{\s,])'([a-zA-Z0-9_]+)'\s*:", r'\1"\2":', text)
-        text_fixed = re.sub(r":\s*'([^']*)'", r': "\1"', text_fixed)
+        pass
+
+    # 6. Fallback fixes: repair single quotes & unclosed brackets
+    text_fixed = re.sub(r"([{\s,])'([a-zA-Z0-9_]+)'\s*:", r'\1"\2":', text)
+    text_fixed = re.sub(r":\s*'([^']*)'", r': "\1"', text_fixed)
+    text_fixed = re.sub(r",\s*([\}\]])", r"\1", text_fixed)
+
+    if text_fixed.count('"') % 2 != 0:
+        text_fixed += '"'
+
+    open_braces = text_fixed.count("{") - text_fixed.count("}")
+    open_brackets = text_fixed.count("[") - text_fixed.count("]")
+    if open_brackets > 0:
+        text_fixed += "]" * open_brackets
+    if open_braces > 0:
+        text_fixed += "}" * open_braces
+
+    try:
+        json.loads(text_fixed)
+        return text_fixed.strip()
+    except Exception:
+        import ast
         try:
-            json.loads(text_fixed)
-            return text_fixed.strip()
+            val = ast.literal_eval(text)
+            if isinstance(val, dict):
+                return json.dumps(val)
         except Exception:
-            import ast
-            try:
-                val = ast.literal_eval(text)
-                if isinstance(val, dict):
-                    return json.dumps(val)
-            except Exception:
-                pass
+            pass
 
     return text.strip()
 

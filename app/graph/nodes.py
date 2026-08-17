@@ -1,10 +1,10 @@
 """
-EdgeMind V2 LangGraph Nodes
+EdgeMind V2.1 LangGraph Nodes
 
-Defines all operational nodes for EdgeMind V2 workflow execution:
+Defines all operational nodes for EdgeMind V2.1 workflow execution:
 - Memory Lookup
 - Planner V2
-- Autonomous File Discovery
+- Autonomous File Discovery & Activity Streaming
 - Plan Refinement
 - Task Selection & Model Router
 - Task Executor (search, analyze, explain, debug, edit, deployment) with Analysis Context Propagation
@@ -21,6 +21,7 @@ from typing import Any
 from app.editing.editing_service import EditingService
 from app.editing.models import EditRequest
 from app.editing.validator import detect_language, validate_code
+from app.events.activity_stream import ActivityStream, EventType
 from app.graph.evaluator import evaluate_execution
 from app.graph.planner import create_plan
 from app.graph.state import EdgeMindState
@@ -55,6 +56,9 @@ def memory_lookup_node(state: EdgeMindState) -> EdgeMindState:
 
 def planner_node(state: EdgeMindState) -> EdgeMindState:
     """Generate structured multi-step execution plan using Planner V2."""
+    ActivityStream.emit("Understanding request...", EventType.PROGRESS, stage="planner")
+    ActivityStream.emit("Creating execution plan...", EventType.PROGRESS, stage="planner")
+
     try:
         plan = create_plan(
             user_query=state["user_query"],
@@ -67,12 +71,18 @@ def planner_node(state: EdgeMindState) -> EdgeMindState:
         state["plan"] = plan
         state["current_step"] = 0
         state["execution_success"] = True
+
+        task_tools = [t.get("tool", "") for t in plan if t.get("tool")]
+        tools_str = " → ".join(t.capitalize() for t in task_tools) if task_tools else "Execute"
+        ActivityStream.emit(f"{tools_str}", EventType.ACTION, stage="planner")
+        ActivityStream.emit(f"{len(plan)} task{'s' if len(plan) != 1 else ''} planned", EventType.SUCCESS, stage="planner")
+
     except Exception as exc:
-        print(f"Planner node error: {exc}")
         state["plan"] = []
         state["current_step"] = 0
         state["result"] = f"Planner failed: {exc}"
         state["execution_success"] = False
+        ActivityStream.emit(f"Planner failed: {exc}", EventType.ERROR, stage="planner")
 
     return state
 
@@ -82,6 +92,8 @@ def file_discovery_node(state: EdgeMindState) -> EdgeMindState:
     Autonomous File Discovery Node (Phase 4).
     Resolves project files without requiring user to specify file paths.
     """
+    ActivityStream.emit("Identifying source file...", EventType.PROGRESS, stage="file_discovery")
+
     query = state["user_query"]
     project_path = state.get("project_path", ".")
     active_file = state.get("file_path") or state.get("source_file") or ""
@@ -94,6 +106,9 @@ def file_discovery_node(state: EdgeMindState) -> EdgeMindState:
         state["file_path"] = best_file
         state["source_file"] = best_file
         state["source_language"] = detect_language(best_file)
+        ActivityStream.emit(f"Found {Path(best_file).name}", EventType.SUCCESS, stage="file_discovery")
+    else:
+        ActivityStream.emit("No specific source file required", EventType.INFO, stage="file_discovery")
 
     query_lower = query.lower()
     target_lang = None
@@ -109,12 +124,13 @@ def file_discovery_node(state: EdgeMindState) -> EdgeMindState:
         target_lang = "typescript"
 
     state["target_language"] = target_lang or state.get("source_language") or "python"
-
     return state
 
 
 def plan_refinement_node(state: EdgeMindState) -> EdgeMindState:
     """Refine task items in execution plan with discovered files and languages."""
+    ActivityStream.emit("Determining requested operation...", EventType.PROGRESS, stage="plan_refinement")
+
     plan = state.get("plan", [])
     project_path = state.get("project_path", ".")
     source_file = state.get("source_file") or state.get("file_path") or ""
@@ -139,11 +155,13 @@ def plan_refinement_node(state: EdgeMindState) -> EdgeMindState:
                 task_dict["source_file"] = source_file
         else:
             task_dict["source_file"] = source_file
+
         if not task_dict.get("source_language"):
             task_dict["source_language"] = source_lang
         if not task_dict.get("target_language"):
             task_dict["target_language"] = target_lang
 
+        # Infer create vs modify intelligence
         is_create_intent = any(w in state.get("user_query", "").lower() for w in ["create", "new file", "convert", "generate a new"])
         if is_create_intent and task_dict.get("tool") == "edit":
             task_dict["operation"] = "create"
@@ -166,7 +184,8 @@ def plan_refinement_node(state: EdgeMindState) -> EdgeMindState:
                     src_path = Path(source_file)
                     ext_map = {"python": ".py", "java": ".java", "cpp": ".cpp", "javascript": ".js", "typescript": ".ts"}
                     new_ext = ext_map.get(target_lang, src_path.suffix)
-                    cand_name = f"{src_path.stem}_v2{new_ext}" if new_ext == src_path.suffix else f"{src_path.stem}{new_ext}"
+                    task_dict["target_file"] = f"{src_path.stem}_v2{new_ext}" if new_ext == src_path.suffix else f"{src_path.stem}{new_ext}"
+
         if task_dict.get("target_file"):
             tgt_path = Path(task_dict["target_file"])
             project_root = Path(project_path).expanduser().resolve()
@@ -239,22 +258,27 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
     project_path = state.get("project_path", ".")
     source_file = state.get("source_file") or state.get("file_path") or ""
     model = state.get("selected_model", "qwen2.5-coder:3b")
+    src_name = Path(source_file).name if source_file else "project"
 
     try:
         if task == "search":
+            ActivityStream.emit(f"Searching candidate files for '{state['user_query']}'...", EventType.PROGRESS, stage="executor")
             found = search_project_files(state["user_query"], project_path)
             res = f"Discovered candidate files: {', '.join(found) if found else 'None'}"
             state["result"] = res
             state["analysis_result"] = res
             state["execution_success"] = True
+            ActivityStream.emit(f"Search complete: found {len(found)} candidate(s)", EventType.SUCCESS, stage="executor")
             return state
 
         elif task == "analyze":
+            ActivityStream.emit(f"Analyzing {src_name}...", EventType.PROGRESS, stage="executor")
             report = analyze_project(project_path, selected_model=model)
             res = report.get("analysis", "Analysis completed.")
             state["result"] = res
             state["analysis_result"] = res
             state["execution_success"] = True
+            ActivityStream.emit("Analysis complete", EventType.SUCCESS, stage="executor")
             return state
 
         elif task == "explain":
@@ -262,12 +286,15 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
             if not src_path or not src_path.exists():
                 state["result"] = "Explain task failed: Source file not found."
                 state["execution_success"] = False
+                ActivityStream.emit("Explain failed: Source file not found", EventType.ERROR, stage="executor")
                 return state
 
+            ActivityStream.emit(f"Explaining {src_name}...", EventType.PROGRESS, stage="executor")
             res = explain_code(str(src_path), selected_model=model)
             state["result"] = res
             state["analysis_result"] = res
             state["execution_success"] = True
+            ActivityStream.emit("Explanation generated", EventType.SUCCESS, stage="executor")
             return state
 
         elif task == "debug":
@@ -278,10 +305,12 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
             else:
                 error_content = state["user_query"]
 
+            ActivityStream.emit(f"Debugging {src_name}...", EventType.PROGRESS, stage="executor")
             res = debug_error(error_content, selected_model=model)
             state["result"] = res
             state["analysis_result"] = res
             state["execution_success"] = True
+            ActivityStream.emit("Debug analysis complete", EventType.SUCCESS, stage="executor")
             return state
 
         elif task == "edit":
@@ -289,10 +318,12 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
             operation = state.get("operation", "modify")
             target_file = state.get("target_file")
             project_root = Path(project_path).expanduser().resolve()
+            target_lang = state.get("target_language") or "python"
 
             if operation == "modify" and (not src_path or not src_path.exists()):
                 state["result"] = f"Edit task failed: Valid source file is required for modify operation (resolved: {src_path})."
                 state["execution_success"] = False
+                ActivityStream.emit("Edit failed: Valid source file required", EventType.ERROR, stage="executor")
                 return state
 
             resolved_target = None
@@ -302,7 +333,7 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                     resolved_target = target_path if target_path.is_absolute() else (project_root / target_path).resolve()
                 elif src_path:
                     ext_map = {"python": ".py", "java": ".java", "cpp": ".cpp", "javascript": ".js", "typescript": ".ts"}
-                    target_ext = ext_map.get(state.get("target_language"), src_path.suffix)
+                    target_ext = ext_map.get(target_lang, src_path.suffix)
                     resolved_target = src_path.with_suffix(target_ext)
 
                 if resolved_target:
@@ -311,6 +342,7 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                     except ValueError:
                         state["result"] = "Edit failed: Security error - Target file must be inside project root."
                         state["execution_success"] = False
+                        ActivityStream.emit("Edit failed: Security error", EventType.ERROR, stage="executor")
                         return state
 
                     if resolved_target.exists():
@@ -318,12 +350,15 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                         src_path = resolved_target
                         resolved_target = None
 
+            lang_label = target_lang.capitalize() if target_lang else "Code"
+            ActivityStream.emit(f"Generating {lang_label} implementation...", EventType.PROGRESS, stage="executor")
+
             edit_req = EditRequest(
                 file_path=str(src_path) if src_path else str(project_root),
                 instruction=state.get("task_instruction") or state["user_query"],
                 model=model,
                 source_language=state.get("source_language") or (detect_language(str(src_path)) if src_path else "python"),
-                target_language=state.get("target_language") or "python",
+                target_language=target_lang,
                 target_file=str(resolved_target) if resolved_target else None,
                 operation=operation,
                 create_backup=(operation != "create"),
@@ -338,21 +373,26 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
             if not response.success:
                 state["result"] = f"Edit preparation failed:\n{response.error}"
                 state["execution_success"] = False
+                ActivityStream.emit("Edit preparation failed", EventType.ERROR, stage="executor")
                 return state
 
             if operation == "create":
                 service.create_file(response, project_path=project_path)
                 state["modified_file"] = response.output_file
                 state["result"] = f"Successfully created file: {response.output_file}\n\n{response.diff}"
+                ActivityStream.emit(f"Generated {Path(response.output_file).name}", EventType.SUCCESS, stage="executor")
             else:
                 service.apply_edit(response, response.file_path, project_path=project_path)
                 state["modified_file"] = response.file_path
                 state["result"] = f"Successfully modified file: {response.file_path}\n\n{response.diff}"
+                ActivityStream.emit(f"Modified {Path(response.file_path).name}", EventType.SUCCESS, stage="executor")
 
+            ActivityStream.emit("Validating generated code...", EventType.PROGRESS, stage="executor")
             state["execution_success"] = True
             return state
 
         elif task == "deployment":
+            ActivityStream.emit("Generating deployment files...", EventType.PROGRESS, stage="executor")
             query_lower = state["user_query"].lower()
             if "compose" in query_lower:
                 state["result"] = save_docker_compose(project_path, selected_model=model)
@@ -363,6 +403,7 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                 state["result"] = save_dockerfile(project_path, selected_model=model)
 
             state["execution_success"] = True
+            ActivityStream.emit("Deployment files generated", EventType.SUCCESS, stage="executor")
             return state
 
         else:
@@ -373,17 +414,17 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
     except Exception as exc:
         state["result"] = f"Task execution failed: {type(exc).__name__}: {exc}"
         state["execution_success"] = False
+        ActivityStream.emit(f"Task execution failed: {exc}", EventType.ERROR, stage="executor")
         return state
 
 
 def reviewer_node(state: EdgeMindState) -> EdgeMindState:
     """
     Reviewer Stage V2 (Phase 7 & Section 14: True Result & Disk Inspection).
-    Inspects actual filesystem state on disk:
-    - For CREATE: Reads actual created file from disk, checks non-emptiness, runs validate_code on actual disk content, confirms source immutability.
-    - For MODIFY: Reads actual modified file from disk, runs validate_code on actual disk content.
-    - For ANALYZE/EXPLAIN/SEARCH: Verifies no files were modified.
+    Inspects actual filesystem state on disk and emits verification activity events.
     """
+    ActivityStream.emit("Reviewing changes...", EventType.PROGRESS, stage="reviewer")
+
     project_path = state.get("project_path", ".")
     task = state.get("current_task")
     operation = state.get("operation", "modify")
@@ -399,8 +440,7 @@ def reviewer_node(state: EdgeMindState) -> EdgeMindState:
     overall_success = exec_success
 
     if task in {"analyze", "explain", "search"}:
-        # Analysis-only tasks should not modify files
-        review_details.append(f"✓ Analysis task completed without file modifications.")
+        review_details.append("✓ Analysis task completed without file modifications.")
 
     elif task == "edit":
         edit_resp = state.get("edit_response")
@@ -409,22 +449,22 @@ def reviewer_node(state: EdgeMindState) -> EdgeMindState:
             review_details.append("Edit preparation failed.")
 
         if operation == "create":
-            # 1. Source file must be preserved on disk
             if src_path and src_path.exists():
                 review_details.append(f"✓ Source file preserved: {src_path}")
+                ActivityStream.emit("Source preserved", EventType.SUCCESS, stage="reviewer")
             else:
                 overall_success = False
                 review_details.append(f"✗ Source file missing or corrupted: {src_path}")
 
-            # 2. Target file must be created on disk and non-empty
             if mod_path and mod_path.exists():
                 actual_disk_content = mod_path.read_text(encoding="utf-8", errors="ignore")
                 if actual_disk_content.strip():
                     review_details.append(f"✓ Target file created: {mod_path}")
-                    # 3. Validate actual file content read from disk
+                    ActivityStream.emit(f"Target file written: {mod_path.name}", EventType.SUCCESS, stage="reviewer")
                     valid, val_msg = validate_code(actual_disk_content, target_language)
                     if valid:
                         review_details.append(f"✓ Syntax validation passed: {val_msg}")
+                        ActivityStream.emit(f"{target_language.capitalize()} syntax valid", EventType.SUCCESS, stage="reviewer")
                     else:
                         overall_success = False
                         review_details.append(f"✗ Syntax validation failed on disk file: {val_msg}")
@@ -436,12 +476,12 @@ def reviewer_node(state: EdgeMindState) -> EdgeMindState:
                 review_details.append(f"✗ Target file was not created on disk: {mod_path}")
 
         elif operation == "modify":
-            # 1. Modified file must exist on disk and pass syntax validation
             if mod_path and mod_path.exists():
                 actual_disk_content = mod_path.read_text(encoding="utf-8", errors="ignore")
                 valid, val_msg = validate_code(actual_disk_content, target_language)
                 if valid:
                     review_details.append(f"✓ Modification syntax passed: {val_msg}")
+                    ActivityStream.emit(f"{target_language.capitalize()} syntax valid", EventType.SUCCESS, stage="reviewer")
                 else:
                     overall_success = False
                     review_details.append(f"✗ Modification syntax failed on disk file: {val_msg}")

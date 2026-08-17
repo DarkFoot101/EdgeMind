@@ -1,5 +1,5 @@
 """
-TypedDict state definition for EdgeMind V2 LangGraph execution.
+TypedDict state definition for EdgeMind V2.1 LangGraph execution.
 """
 
 from typing import TypedDict, Optional, Any
@@ -15,6 +15,7 @@ class EdgeMindState(TypedDict):
     modified_file: Optional[str]  # file actually created or modified
     source_language: Optional[str]
     target_language: Optional[str]
+    intent: Optional[str]  # execution, follow_up, conversational
     plan: list[dict]
     current_step: int
     current_task: str

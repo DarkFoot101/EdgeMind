@@ -14,6 +14,8 @@ app/editing/editing_service.py
 app/editing/file_manager.py
 app/editing/models.py
 app/editing/validator.py
+app/events/__init__.py
+app/events/activity_stream.py
 app/graph/__init__.py
 app/graph/evaluator.py
 app/graph/nodes.py
@@ -26,10 +28,14 @@ app/memory/database.py
 app/memory/memory_manager.py
 app/memory/schema.py
 app/models/__init__.py
+app/models/model_manager.py
 app/models/model_router.py
 app/models/ollama_client.py
 app/resources/__init__.py
 app/resources/system_monitor.py
+app/routing/__init__.py
+app/routing/conversation_handler.py
+app/routing/intent_router.py
 app/scripts/__init__.py
 app/scripts/export_graph.py
 app/setup/__init__.py
@@ -57,5 +63,6 @@ tests/test_agent_workflow.py
 tests/test_editing.py
 tests/test_file_manager.py
 tests/test_memory.py
+tests/test_v21_features.py
 tests/test_v2_complex_agentic.py
 tests/test_v2_comprehensive.py
