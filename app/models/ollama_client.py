@@ -13,6 +13,8 @@ def generate_response(
     prompt: str,
     model: str = "qwen2.5-coder:3b",
     system_prompt: Optional[str] = None,
+    options: Optional[dict] = None,
+    keep_alive: str = "10m",
 ) -> str:
     """Generate a response from a local Ollama model."""
 
@@ -23,10 +25,15 @@ def generate_response(
 
     start = time.perf_counter()
 
-    response = ollama.chat(
-        model=model,
-        messages=messages,
-    )
+    chat_kwargs = {
+        "model": model,
+        "messages": messages,
+        "keep_alive": keep_alive,
+    }
+    if options:
+        chat_kwargs["options"] = options
+
+    response = ollama.chat(**chat_kwargs)
 
     end = time.perf_counter()
 

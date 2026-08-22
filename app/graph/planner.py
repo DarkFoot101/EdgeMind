@@ -283,7 +283,7 @@ def sanitize_plan_tasks(plan: Plan, user_query: str, active_file: str = "") -> l
             "target_language": None,
             "verification_requirements": None,
         })
-    elif is_edit_query and not has_edit_task:
+    elif is_edit_query and not has_edit_task and not is_deployment_query:
         sanitized_tasks.append({
             "tool": "edit",
             "operation": "create" if "convert" in query_lower or "create" in query_lower else "modify",
@@ -328,6 +328,9 @@ def create_plan(
         print(f"\nPlanner V2 validation notice: First attempt required recovery retry ({exc}). Retrying...\n")
 
         correction_prompt = f"""
+Original User Request: {user_query}
+{context_str}
+
 Your previous response could not be parsed as valid JSON conforming to the schema.
 Validation error: {exc}
 

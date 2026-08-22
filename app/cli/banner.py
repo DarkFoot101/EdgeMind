@@ -15,7 +15,7 @@ def print_banner() -> None:
 
     print("\n")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("                    EdgeMind v1.0")
+    print("                    EdgeMind v1.0.3")
     print("      Resource-Aware Agentic Coding Assistant")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 

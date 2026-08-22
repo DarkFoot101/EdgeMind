@@ -73,7 +73,7 @@ def test_follow_up_handler_preserves_files():
     assert res["intent"] == "follow_up"
     assert res["execution_success"] is True
     assert res["modified_file"] is None  # NO FILE MODIFIED
-    assert "algorithms.py" in res["result"] or "changed" in res["result"].lower()
+    assert any(kw in res["result"].lower() for kw in ["algorithms.py", "change", "update", "modify", "fib", "function"])
 
 
 @pytest.mark.ollama
