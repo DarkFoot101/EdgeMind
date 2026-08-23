@@ -28,10 +28,13 @@ def clean_generated_code(code: str) -> str:
         if match:
             text = match.group(1).strip()
 
-    # 2. Strip leading non-code conversational text before first valid code statement
+    # 2. Strip closing XML/HTML tags (e.g. </javascript-source>, </code>, </python-source>)
+    text = re.sub(r"</[a-zA-Z0-9_\-]+\s*>", "", text)
+
+    # 3. Strip leading non-code conversational text before first valid code statement
     lines = text.splitlines()
     start_idx = 0
-    code_start_pattern = r"^(?:import|from|def|class|public|private|protected|package|function|const|let|var|//|/\*|#|@|using|namespace)\b"
+    code_start_pattern = r"^(?:import|from|def|async|class|public|private|protected|package|function|const|let|var|//|/\*|#|@|using|namespace|try|with|if|for|while|struct|enum|interface|include|void|type|export|\"\"\"|'''|[a-zA-Z_]\w*\s*[:=])"
     for idx, line in enumerate(lines):
         line_s = line.strip()
         if not line_s:
@@ -42,11 +45,8 @@ def clean_generated_code(code: str) -> str:
 
     text = "\n".join(lines[start_idx:])
 
-    # 3. Strip trailing conversational commentary
+    # 4. Strip trailing conversational commentary
     text = re.sub(r"\n+(?:Hope this helps|Let me know|Enjoy|Feel free|Note:|Explanation:|Summary:).*$", "", text, flags=re.IGNORECASE | re.DOTALL)
-
-    # 4. Strip closing XML/HTML tags (e.g. </javascript-source>, </code>, </python>)
-    text = re.sub(r"\n*</[a-zA-Z0-9_\-]+>\s*$", "", text)
 
     return text.strip()
 

@@ -142,7 +142,7 @@ JSON:
 def clean_planner_json(raw_text: str) -> str:
     """
     Cleans raw LLM planner response text into strictly valid JSON.
-    Handles markdown codeblocks, inline comments, unescaped quotes, and trailing comma artifacts.
+    Handles markdown codeblocks, inline comments, unescaped quotes, single quotes, and trailing comma artifacts.
     """
     if not raw_text or not raw_text.strip():
         return '{"tasks": []}'
@@ -165,20 +165,27 @@ def clean_planner_json(raw_text: str) -> str:
     text = re.sub(r"//.*$", "", text, flags=re.MULTILINE)
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
 
-    # 4. Fix trailing quotes and trailing commas
-    text = re.sub(r"'+\s*\"", '"', text)
-    text = re.sub(r",\s*([\}])", r"\1", text)
-
-    # 5. Fast path: try standard json.loads
+    # 4. Fast path: try standard json.loads
     try:
         json.loads(text)
         return text.strip()
     except Exception:
         pass
 
-    # 6. Fallback fixes: repair single quotes & unclosed brackets
-    text_fixed = re.sub(r"([{\s,])'([a-zA-Z0-9_]+)'\s*:", r'\1"\2":', text)
-    text_fixed = re.sub(r":\s*'([^']*)'", r': "\1"', text_fixed)
+    # 5. Try Python dict literal parsing (handles single quotes safely)
+    try:
+        import ast
+        val = ast.literal_eval(text)
+        if isinstance(val, (dict, list)):
+            return json.dumps(val)
+    except Exception:
+        pass
+
+    # 6. Fallback regex repairs
+    text_fixed = re.sub(r"'+\s*\"", '"', text)
+    text_fixed = re.sub(r"\"+\s*'", '"', text_fixed)
+    text_fixed = re.sub(r"([{\s,])'([a-zA-Z0-9_]+)'\s*:", r'\1"\2":', text_fixed)
+    text_fixed = re.sub(r":\s*'([^'\n]*?)'*(\s*[,}\]])", r': "\1"\2', text_fixed)
     text_fixed = re.sub(r",\s*([\}\]])", r"\1", text_fixed)
 
     if text_fixed.count('"') % 2 != 0:
@@ -195,16 +202,96 @@ def clean_planner_json(raw_text: str) -> str:
         json.loads(text_fixed)
         return text_fixed.strip()
     except Exception:
-        import ast
-        try:
-            val = ast.literal_eval(text)
-            if isinstance(val, dict):
-                return json.dumps(val)
-        except Exception:
-            pass
+        pass
 
     return text.strip()
 
+
+
+# Qwen planner fix:
+# Normalize tool/operation mismatches before strict plan validation.
+# Keep tool semantics separate from executable operation semantics.
+def normalize_planner_dict(raw_data: Any) -> dict[str, Any]:
+    """
+    Normalizes raw dict parsed from LLM planner output prior to Pydantic validation.
+    Maps invalid tool/operation combinations (such as tool="explain", operation="explain")
+    to valid operational modes while preserving tool semantics.
+    """
+    if isinstance(raw_data, list):
+        raw_data = {"tasks": raw_data}
+
+    if not isinstance(raw_data, dict):
+        return {"tasks": []}
+
+    tasks = raw_data.get("tasks")
+    if not isinstance(tasks, list):
+        return {"tasks": []}
+
+    valid_ops = {"inspect", "search", "analyze", "modify", "create", "test", "verify"}
+    valid_tools = {
+        "analyze", "search", "edit", "debug", "explain", "deployment",
+        "test", "verify", "translate", "create", "modify", "refactor",
+        "optimize", "fix", "convert"
+    }
+
+    normalized_tasks = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+
+        task_copy = dict(task)
+
+        # 1. Clean quote artifacts from filenames
+        if isinstance(task_copy.get("target_file"), str):
+            task_copy["target_file"] = task_copy["target_file"].strip("'\" ")
+        if isinstance(task_copy.get("source_file"), str):
+            task_copy["source_file"] = task_copy["source_file"].strip("'\" ")
+
+        # 2. Extract and sanitize tool
+        tool = task_copy.get("tool")
+        if isinstance(tool, str):
+            tool_clean = tool.strip("'\" ").lower()
+            if tool_clean in valid_tools:
+                task_copy["tool"] = tool_clean
+
+        # 3. Handle operation normalization and tool/operation mismatches
+        op = task_copy.get("operation")
+        op_str = str(op).strip("'\" ").lower() if op is not None else ""
+
+        if op_str in valid_ops:
+            task_copy["operation"] = op_str
+        else:
+            # LLM copied tool value into operation or generated an invalid operation name
+            current_tool = task_copy.get("tool")
+            if current_tool == "explain" or op_str == "explain":
+                task_copy["operation"] = "inspect"
+            elif current_tool == "search" or op_str == "search":
+                task_copy["operation"] = "search"
+            elif current_tool == "analyze" or op_str in {"analyze", "analysis"}:
+                task_copy["operation"] = "analyze"
+            elif current_tool == "debug" or op_str in {"debug", "debugging"}:
+                task_copy["operation"] = "inspect"
+            elif current_tool == "deployment" or op_str in {"deployment", "deploy"}:
+                task_copy["operation"] = "create"
+            elif current_tool in {"edit", "create", "modify", "refactor", "fix", "convert"} or op_str in {"edit", "update", "fix", "refactor"}:
+                task_copy["operation"] = "create" if task_copy.get("target_file") else "modify"
+            else:
+                task_copy["operation"] = "inspect"
+
+        normalized_tasks.append(task_copy)
+
+    return {"tasks": normalized_tasks}
+
+
+def parse_and_validate_plan(raw_text: str) -> Plan:
+    """
+    Cleans raw LLM response text, normalizes tool/operation dictionary artifacts,
+    and validates against the Pydantic Plan schema.
+    """
+    cleaned = clean_planner_json(raw_text)
+    data = json.loads(cleaned)
+    normalized = normalize_planner_dict(data)
+    return Plan.model_validate(normalized)
 
 
 def sanitize_plan_tasks(plan: Plan, user_query: str, active_file: str = "") -> list[dict[str, Any]]:
@@ -321,8 +408,7 @@ def create_plan(
     )
 
     try:
-        cleaned = clean_planner_json(raw_response)
-        plan = Plan.model_validate_json(cleaned)
+        plan = parse_and_validate_plan(raw_response)
         return sanitize_plan_tasks(plan, user_query, active_file)
     except Exception as exc:
         print(f"\nPlanner V2 validation notice: First attempt required recovery retry ({exc}). Retrying...\n")
@@ -360,9 +446,8 @@ Please correct your output. Return ONLY a valid JSON object matching:
         )
 
         try:
-            cleaned_retry = clean_planner_json(retry_raw)
-            plan = Plan.model_validate_json(cleaned_retry)
-            return sanitize_plan_tasks(plan, user_query, active_file)
+            plan_retry = parse_and_validate_plan(retry_raw)
+            return sanitize_plan_tasks(plan_retry, user_query, active_file)
         except Exception as retry_exc:
             is_deploy_query = any(w in user_query.lower() for w in ["docker", "dockerfile", "compose", "requirements", "deploy", "container"])
             default_tool = "deployment" if is_deploy_query else ("edit" if any(w in user_query.lower() for w in ["fix", "modify", "update", "convert", "create"]) else "analyze")
