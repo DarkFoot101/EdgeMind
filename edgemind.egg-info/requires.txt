@@ -1,6 +1,0 @@
-ollama
-langgraph
-langchain
-pydantic>=2.0
-typer
-psutil
