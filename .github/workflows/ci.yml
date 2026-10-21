@@ -17,6 +17,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Compile and bundle extension
+        run: |
+          npm ci || npm install
+          npm run compile
+          mkdir -p app/extension/bundled
+          cp package.json app/extension/bundled/
+          cp -R out app/extension/bundled/
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -41,6 +54,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Compile and bundle extension
+        run: |
+          npm ci || npm install
+          npm run compile
+          mkdir -p app/extension/bundled
+          cp package.json app/extension/bundled/
+          cp -R out app/extension/bundled/
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5

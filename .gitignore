@@ -12,4 +12,6 @@ dist/
 *.egg-info/
 .pytest_cache/
 node_modules/
-out/
+/out/
+!app/extension/bundled/
+!app/extension/bundled/**
