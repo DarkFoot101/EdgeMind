@@ -1,0 +1,77 @@
+{
+    "name": "edgemind-vscode",
+    "displayName": "EdgeMind AI",
+    "description": "Local Resource-Aware AI Coding Assistant for VS Code",
+    "version": "2.0.0",
+    "publisher": "edgemind",
+    "engines": {
+        "vscode": "^1.88.0"
+    },
+    "categories": [
+        "Programming Languages",
+        "AI"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "edgemind.inlineEdit",
+                "title": "EdgeMind: Edit Code Inline",
+                "category": "EdgeMind"
+            },
+            {
+                "command": "edgemind.acceptDiff",
+                "title": "EdgeMind: Accept Changes",
+                "category": "EdgeMind"
+            },
+            {
+                "command": "edgemind.rejectDiff",
+                "title": "EdgeMind: Reject Changes",
+                "category": "EdgeMind"
+            },
+            {
+                "command": "edgemind.showStatus",
+                "title": "EdgeMind: Show Status",
+                "category": "EdgeMind"
+            },
+            {
+                "command": "edgemind.selectModel",
+                "title": "EdgeMind: Select AI Model",
+                "category": "EdgeMind"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "edgemind.inlineEdit",
+                "key": "ctrl+i",
+                "mac": "cmd+i",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "edgemind.acceptDiff",
+                "key": "ctrl+enter",
+                "mac": "cmd+enter",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "edgemind.rejectDiff",
+                "key": "escape",
+                "mac": "escape",
+                "when": "editorTextFocus"
+            }
+        ]
+    },
+    "scripts": {
+        "compile": "node node_modules/typescript/bin/tsc -p ./",
+        "watch": "node node_modules/typescript/bin/tsc -watch -p ./"
+    },
+    "dependencies": {},
+    "devDependencies": {
+        "@types/node": "20.12.7",
+        "@types/vscode": "1.88.0",
+        "typescript": "5.4.5"
+    }
+}

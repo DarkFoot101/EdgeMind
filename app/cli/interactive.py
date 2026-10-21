@@ -9,11 +9,26 @@ Autonomous file discovery, structured Change Review summaries, and robust SQLite
 import re
 import shutil
 import time
+import sys
 from pathlib import Path
+
+# Enforce EdgeMind root priority and isolate 'app' package against workspace collisions
+_edgemind_root = str(Path(__file__).resolve().parent.parent.parent)
+if _edgemind_root in sys.path:
+    sys.path.remove(_edgemind_root)
+sys.path.insert(0, _edgemind_root)
+
+import app
+_edgemind_app_dir = str(Path(__file__).resolve().parent.parent)
+app.__path__ = [_edgemind_app_dir]
+
+if "app.models" in sys.modules and not hasattr(sys.modules["app.models"], "__path__"):
+    del sys.modules["app.models"]
 
 from app.cli.banner import print_banner
 from app.cli.commands import (
     clear_terminal,
+    install_extension_command,
     show_help,
     show_memory,
     show_status,
@@ -208,6 +223,18 @@ def prompt_user_approval(result_data: dict, project_path: str = ".") -> bool:
 
 
 def run():
+    # Handle dedicated CLI subcommands / flags
+    if len(sys.argv) > 1 and sys.argv[1].lower() in {
+        "install-extension",
+        "--install-extension",
+        "vscode",
+        "--vscode",
+        "setup-vscode",
+        "/vscode",
+    }:
+        install_extension_command()
+        return
+
     from app.models.model_manager import ModelManager
     from app.setup.checks import (
         check_disk,
@@ -272,6 +299,15 @@ def run():
             print("Required model missing. Exiting.")
             return
 
+    # Check and auto-deploy bundled VS Code extension if available
+    try:
+        from app.extension.installer import ensure_extension_installed
+        ext_res = ensure_extension_installed()
+        if ext_res.get("success") and not ext_res.get("already_installed"):
+            print("✓ EdgeMind VS Code & Cursor extension installed automatically.\n")
+    except Exception:
+        pass
+
     print_banner()
     session = SessionState()
 
@@ -297,6 +333,10 @@ def run():
 
         if command == "help":
             show_help()
+            continue
+
+        if command in {"/vscode", "vscode", "/extension", "extension"}:
+            install_extension_command()
             continue
 
         if command == "status":
@@ -334,6 +374,16 @@ def run():
             session.require_approval = False
             print("\n⚠ Interactive Review Mode DISABLED. Code modifications will be applied automatically.\n")
             continue
+
+        if command.startswith("/model") or command == "model" or command.startswith("model "):
+            from app.cli.commands import show_model_menu
+            if command.startswith("/model"):
+                arg = command[len("/model"):].strip()
+            else:
+                arg = command[len("model"):].strip()
+            show_model_menu(session, arg)
+            continue
+
 
         update_session_context(session, query)
 

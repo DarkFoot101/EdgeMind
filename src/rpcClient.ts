@@ -32,23 +32,36 @@ export class EdgeMindRpcClient {
 
     private spawnDaemon(): void {
         this.stderrBuffer = '';
-        const extVenvPython = path.join(this.extensionRoot, 'venv', 'bin', 'python3');
-        const wsVenvPython = path.join(this.workspaceRoot, 'venv', 'bin', 'python3');
+        const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+        const candidatePythons = [
+            path.join(this.extensionRoot, 'venv', 'bin', 'python3'),
+            path.join(homeDir, 'EdgeMind', 'venv', 'bin', 'python3'),
+            path.join(this.workspaceRoot, 'venv', 'bin', 'python3'),
+        ];
 
         let pythonBin = 'python3';
-        if (cp.spawnSync('test', ['-f', extVenvPython]).status === 0) {
-            pythonBin = extVenvPython;
-        } else if (cp.spawnSync('test', ['-f', wsVenvPython]).status === 0) {
-            pythonBin = wsVenvPython;
+        for (const cand of candidatePythons) {
+            try {
+                if (cp.spawnSync('test', ['-f', cand]).status === 0) {
+                    pythonBin = cand;
+                    break;
+                }
+            } catch {
+                // continue search
+            }
         }
 
-        const pythonPathEnv = [this.extensionRoot, this.workspaceRoot, process.env.PYTHONPATH || ''].filter(Boolean).join(':');
+        // Isolate PYTHONPATH: ONLY include extensionRoot and ambient system PYTHONPATH.
+        // NEVER include workspaceRoot, to prevent user projects with 'app/' folders (FastAPI, Flask) from shadowing EdgeMind's app package.
+        const pythonPathEnv = [this.extensionRoot, process.env.PYTHONPATH || ''].filter(Boolean).join(':');
+        const daemonCwd = this.extensionRoot;
 
         this.process = cp.spawn(pythonBin, ['-m', 'app.cli.rpc'], {
-            cwd: this.workspaceRoot,
+            cwd: daemonCwd,
             env: {
                 ...process.env,
                 PYTHONPATH: pythonPathEnv,
+                PYTHONSAFEPATH: '1',
                 PYTHONUNBUFFERED: '1',
             },
             stdio: ['pipe', 'pipe', 'pipe'],

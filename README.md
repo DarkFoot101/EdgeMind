@@ -1,6 +1,6 @@
 <div align="center">
 
-# EdgeMind V2.0.0
+# EdgeMind V2.0.1
 
 ## Resource-Aware Agentic Coding Assistant for Local AI Software Engineering
 
@@ -33,8 +33,11 @@ Modern AI coding assistants heavily rely on expensive cloud infrastructure, expo
 
 ## ✨ Core Features
 
-- 👁️ **Visual Review & Interactive Approval Gate**: Preview proposed modifications as colorized green/red unified diffs before disk writes. Accept or reject via `[a]ccept / [r]eject` in CLI or floating buttons in VS Code.
-- 🧩 **Native VS Code Extension**: Seamless inline red/green diff highlighting and floating `[✓ Accept (Cmd+Enter)]` / `[↶ Reject (Esc)]` controls directly inside your editor tab, backed by a zero-dependency local stdio IPC bridge.
+- 👁️ **Visual Review & Interactive Approval Gate**: Preview proposed modifications as colorized green/red unified diffs before disk writes. Accept or reject via `[a]ccept / [r]eject` in CLI or floating `[✓ Accept] / [↶ Reject]` CodeLens buttons in VS Code.
+- 🎛️ **Dynamic Local Model Selector (`/model`)**: Switch installed local models on the fly via `/model` in the CLI or the VS Code status bar QuickPick, with persistent config in `~/.edgemind/config.json`.
+- 📦 **Universal Bundled Extension Auto-Installer**: The PyPI package bundles the native extension automatically. Run `edgemind install-extension` (or `/vscode` in CLI) for zero-setup IDE pair-programming.
+- 🔄 **Smart Recursive File Discovery & Anti-Collision**: Recursively resolves target source files (e.g. `models` → `app/models.py`), auto-detects frameworks (FastAPI, Flask, Django, Pydantic), and enforces namespace sandboxing against user project collisions.
+- 🧩 **Native VS Code & Cursor Extension**: Seamless inline red/green diff highlighting and floating `[✓ Accept (Cmd+Enter)]` / `[↶ Reject (Esc)]` controls directly inside your editor tab, backed by a zero-dependency local stdio IPC bridge.
 - 🎯 **Targeted Code Scoping**: Surgically target specific functions, classes, line ranges (`start_line`, `end_line`), or search/replace blocks without rewriting untouched file regions.
 - 🏆 **Best-of-N Candidate AST Verification**: Generates multiple patch candidates and uses deterministic AST validation and structural scoring to pick the highest quality patch.
 - 📊 **Telemetry & Performance Metrics**: Real-time measurement of inference latency, token counts, patch delta (+/- lines), and peak memory footprint.
@@ -49,7 +52,7 @@ Modern AI coding assistants heavily rely on expensive cloud infrastructure, expo
 
 ## 🏗️ System Architecture
 
-![alt text](image.png)
+(image.png)
 
 ---
 
@@ -231,23 +234,27 @@ edgemind generate-compose .
 
 ---
 
-## 🧩 Native VS Code Extension
+## 🧩 Native VS Code & Cursor Extension
 
-EdgeMind includes a native VS Code extension directly inside the repository for an IDE-native inline pair programming experience:
+EdgeMind includes a native extension bundled directly with the PyPI package for a zero-setup IDE pair-programming experience:
 
 ### Features:
-- **Inline Green/Red Diff Highlighting**: View additions (green) and removals (red) highlighted inline directly in your editor tab.
+- **Inline Green/Red Diff Highlighting**: View additions (green) and removals (red line-through) highlighted inline directly in your active editor.
 - **Floating Action Controls (CodeLens)**: Single-click `[✓ Accept (Cmd+Enter)]` or `[↶ Reject (Esc)]` floating controls above the diff.
+- **Dynamic Model Selector**: Bottom status bar item `$(sparkle) EdgeMind: <model>` provides a 1-click QuickPick menu to switch local models on the fly.
 - **Selection-Aware Scoping**: Highlight any function or line range (<kbd>Cmd</kbd>+<kbd>I</kbd>) to scope edits strictly to those lines.
 - **Zero-Dependency IPC Bridge**: Communicates via standard I/O with EdgeMind's local Python daemon (`app.cli.rpc`), with zero external npm runtime dependencies and hardened supply-chain configs (`ignore-scripts=true`).
 
-### Running the Extension:
-1. Compile TypeScript:
-   ```bash
-   npm run compile
-   ```
-2. Press **`F5`** in VS Code to open the **`[Extension Development Host]`** window.
-3. Open any file in your project, highlight code, and press **<kbd>Cmd</kbd> + <kbd>I</kbd>**.
+### Automatic Installation:
+When you install EdgeMind via pip/uv, the extension is bundled automatically. To install or update it in VS Code or Cursor:
+```bash
+# Automated one-command install:
+edgemind install-extension
+
+# Or inside the interactive shell:
+EdgeMind > /vscode
+```
+Once installed, reload VS Code or Cursor (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> → `Developer: Reload Window`), highlight any code, and press **<kbd>Cmd</kbd> + <kbd>I</kbd>**.
 
 ---
 
@@ -295,7 +302,7 @@ Execute live Ollama integration tests:
 pytest -m ollama -v
 ```
 
-Execute complete test suite (all 40+ tests):
+Execute complete test suite (all 80+ tests):
 
 ```bash
 pytest -v
@@ -309,8 +316,14 @@ EdgeMind utilizes standard Python setuptools packaging defined in `pyproject.tom
 
 ### Building Package Distribution
 ```bash
-pip install build twine
+# 1. Clean previous build artifacts
+rm -rf dist/ build/ *.egg-info
+
+# 2. Build wheel and source distribution
 python -m build
+
+# 3. Validate package distribution archives
+twine check dist/*
 ```
 
 ### PyPI Automated Release Workflow

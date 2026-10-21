@@ -169,7 +169,12 @@ Return ONLY the modified implementation of '{scope.target_symbol}'.
             cleaned_symbol = clean_generated_code(raw)
             return splice_code_slice(request.source_code, cleaned_symbol, start_ln, end_ln)
 
-    # 4. Fallback / Default: Full-File Generation
+    framework_rule = ""
+    framework_context = ""
+    if request.project_framework:
+        framework_rule = f"\n6. ARCHITECTURAL GUARDRAIL: Adhere strictly to the project architecture: {request.project_framework}. Do NOT introduce incompatible frameworks (e.g., do NOT use Flask syntax in a FastAPI project)."
+        framework_context = f"\nProject Architecture & Framework Context:\n<framework-context>\n{request.project_framework}\n</framework-context>\n"
+
     system_prompt = f"""You are a Principal Software Engineer.
 Your task is to modify or convert source code strictly according to user instructions.
 
@@ -182,7 +187,7 @@ RULES:
 2. Do NOT include markdown code block formatting (```).
 3. Do NOT include explanations, introduction, or commentary.
 4. Preserve existing comments, structure, and formatting wherever appropriate.
-5. Never truncate code or leave placeholders like '// TODO: rest of code'.
+5. Never truncate code or leave placeholders like '// TODO: rest of code'.{framework_rule}
 """
 
     analysis_context = ""
@@ -191,7 +196,7 @@ RULES:
 
     prompt = f"""User Instruction:
 {request.instruction}
-{analysis_context}
+{framework_context}{analysis_context}
 Operation: {"Create a new target file from source" if request.operation == "create" else "Modify existing file in-place"}
 Source File Path: {request.file_path}
 Target File Path: {request.target_file or request.file_path}

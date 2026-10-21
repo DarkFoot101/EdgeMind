@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 
 export interface DiffHunk {
-    startLine: number;
-    deletedCount: number;
-    addedCount: number;
-    originalLines: string[];
-    modifiedLines: string[];
+    prefixLines: string[];
+    deletedLines: string[];
+    addedLines: string[];
+    suffixLines: string[];
+    originalCode: string;
+    modifiedCode: string;
+    lensLine: number;
 }
 
 export class DiffDecorator implements vscode.CodeLensProvider {
@@ -17,7 +19,7 @@ export class DiffDecorator implements vscode.CodeLensProvider {
     public readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
 
     constructor() {
-        // Solid green background block for added lines (exact match to IDE screenshot)
+        // Solid green background block for added lines
         this.addedDecorationType = vscode.window.createTextEditorDecorationType({
             backgroundColor: 'rgba(46, 160, 67, 0.25)',
             isWholeLine: true,
@@ -25,7 +27,7 @@ export class DiffDecorator implements vscode.CodeLensProvider {
             overviewRulerLane: vscode.OverviewRulerLane.Right,
         });
 
-        // Solid red background block for deleted lines
+        // Solid red background block with strikethrough for deleted lines
         this.deletedDecorationType = vscode.window.createTextEditorDecorationType({
             backgroundColor: 'rgba(248, 81, 73, 0.25)',
             isWholeLine: true,
@@ -36,7 +38,7 @@ export class DiffDecorator implements vscode.CodeLensProvider {
     }
 
     /**
-     * Compute diff range between original and modified content.
+     * Compute diff segments: prefix, deleted lines (old), added lines (new), suffix.
      */
     public computeHunk(originalCode: string, modifiedCode: string): DiffHunk {
         const origLines = originalCode.split('\n');
@@ -60,43 +62,70 @@ export class DiffDecorator implements vscode.CodeLensProvider {
             suffixMatch++;
         }
 
-        const startLine = prefixMatch;
-        const deletedCount = origLines.length - prefixMatch - suffixMatch;
-        const addedCount = modLines.length - prefixMatch - suffixMatch;
+        const prefixLines = origLines.slice(0, prefixMatch);
+        const deletedLines = origLines.slice(prefixMatch, origLines.length - suffixMatch);
+        const addedLines = modLines.slice(prefixMatch, modLines.length - suffixMatch);
+        const suffixLines = origLines.slice(origLines.length - suffixMatch);
 
         return {
-            startLine,
-            deletedCount,
-            addedCount,
-            originalLines: origLines,
-            modifiedLines: modLines,
+            prefixLines,
+            deletedLines,
+            addedLines,
+            suffixLines,
+            originalCode,
+            modifiedCode,
+            lensLine: Math.max(0, prefixMatch),
         };
     }
 
     /**
-     * Render the visual diff in the active editor with solid green/red blocks.
+     * Render the visual diff in the active editor with solid RED (old) and GREEN (new) blocks.
      */
     public async showPreview(editor: vscode.TextEditor, hunk: DiffHunk): Promise<void> {
         this.activeEditor = editor;
         this.activeHunk = hunk;
 
-        // Replace document content with modified code temporarily for live preview
+        // Build preview document containing both old code (for red highlight) and new code (for green highlight)
+        const previewLines = [
+            ...hunk.prefixLines,
+            ...hunk.deletedLines,
+            ...hunk.addedLines,
+            ...hunk.suffixLines,
+        ];
+
         const fullRange = new vscode.Range(
             editor.document.positionAt(0),
             editor.document.positionAt(editor.document.getText().length)
         );
 
         await editor.edit(editBuilder => {
-            editBuilder.replace(fullRange, hunk.modifiedLines.join('\n'));
+            editBuilder.replace(fullRange, previewLines.join('\n'));
         });
 
-        // Highlight added lines with solid green block
-        if (hunk.addedCount > 0) {
-            const addedRange = new vscode.Range(
-                new vscode.Position(hunk.startLine, 0),
-                new vscode.Position(hunk.startLine + hunk.addedCount - 1, 1000)
+        // 1. Highlight deleted lines with RED background + line-through
+        if (hunk.deletedLines.length > 0) {
+            const delStart = hunk.prefixLines.length;
+            const delEnd = delStart + hunk.deletedLines.length - 1;
+            const delRange = new vscode.Range(
+                new vscode.Position(delStart, 0),
+                new vscode.Position(delEnd, 1000)
             );
-            editor.setDecorations(this.addedDecorationType, [addedRange]);
+            editor.setDecorations(this.deletedDecorationType, [delRange]);
+        } else {
+            editor.setDecorations(this.deletedDecorationType, []);
+        }
+
+        // 2. Highlight added lines with GREEN background
+        if (hunk.addedLines.length > 0) {
+            const addStart = hunk.prefixLines.length + hunk.deletedLines.length;
+            const addEnd = addStart + hunk.addedLines.length - 1;
+            const addRange = new vscode.Range(
+                new vscode.Position(addStart, 0),
+                new vscode.Position(addEnd, 1000)
+            );
+            editor.setDecorations(this.addedDecorationType, [addRange]);
+        } else {
+            editor.setDecorations(this.addedDecorationType, []);
         }
 
         this._onDidChangeCodeLenses.fire();
@@ -110,19 +139,19 @@ export class DiffDecorator implements vscode.CodeLensProvider {
             return [];
         }
 
-        const lensPosition = new vscode.Position(Math.max(0, this.activeHunk.startLine), 0);
+        const lensPosition = new vscode.Position(this.activeHunk.lensLine, 0);
         const range = new vscode.Range(lensPosition, lensPosition);
 
         return [
             new vscode.CodeLens(range, {
                 title: '✓ Accept (Cmd+Enter)',
                 command: 'edgemind.acceptDiff',
-                tooltip: 'Accept and save changes to disk',
+                tooltip: 'Accept new code and remove old code',
             }),
             new vscode.CodeLens(range, {
                 title: '↶ Reject (Esc)',
                 command: 'edgemind.rejectDiff',
-                tooltip: 'Discard changes and revert file',
+                tooltip: 'Discard new code and restore original code',
             }),
         ];
     }

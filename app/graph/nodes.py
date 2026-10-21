@@ -64,6 +64,7 @@ def planner_node(state: EdgeMindState) -> EdgeMindState:
             user_query=state["user_query"],
             memory=state.get("memory_context", ""),
             active_file=state.get("file_path", ""),
+            project_path=state.get("project_path", "."),
         )
         if not plan:
             raise ValueError("Planner generated empty plan.")
@@ -161,39 +162,56 @@ def plan_refinement_node(state: EdgeMindState) -> EdgeMindState:
         if not task_dict.get("target_language"):
             task_dict["target_language"] = target_lang
 
-        # Infer create vs modify intelligence
-        is_create_intent = any(w in state.get("user_query", "").lower() for w in ["create", "new file", "convert", "generate a new"])
-        if is_create_intent and task_dict.get("tool") == "edit":
-            task_dict["operation"] = "create"
+        # Check if requested target_file (or source_file) already exists in project:
+        target_name = task_dict.get("target_file") or task_dict.get("source_file") or source_file
+        existing_target = _resolve_in_project(target_name, project_path) if target_name else None
 
-        if task_dict.get("operation") == "create":
-            tgt = task_dict.get("target_file")
-            if not tgt or (source_file and Path(tgt).name == Path(source_file).name):
-                target_cand = None
-                if state.get("user_query"):
-                    file_tokens = re.findall(r"[\w./\\-]+\.[A-Za-z0-9]+", state["user_query"])
-                    for tok in file_tokens:
-                        tok_clean = tok.strip("'\" ")
-                        if source_file and Path(tok_clean).name != Path(source_file).name:
-                            target_cand = tok_clean
-                            break
+        # Cross-language conversion check (e.g. Java -> Python)
+        is_cross_language = bool(
+            task_dict.get("source_language")
+            and task_dict.get("target_language")
+            and task_dict["source_language"] != task_dict["target_language"]
+        )
 
-                if target_cand:
-                    task_dict["target_file"] = target_cand
-                elif source_file:
-                    src_path = Path(source_file)
-                    ext_map = {"python": ".py", "java": ".java", "cpp": ".cpp", "javascript": ".js", "typescript": ".ts"}
-                    new_ext = ext_map.get(target_lang, src_path.suffix)
-                    task_dict["target_file"] = f"{src_path.stem}_v2{new_ext}" if new_ext == src_path.suffix else f"{src_path.stem}{new_ext}"
+        if existing_target and existing_target.exists() and existing_target.is_file() and not is_cross_language:
+            # Existing file with same language -> IN-PLACE MODIFY
+            task_dict["operation"] = "modify"
+            task_dict["source_file"] = str(existing_target)
+            task_dict["target_file"] = None
+        else:
+            # File creation logic (new file or cross-language conversion)
+            is_create_intent = any(w in state.get("user_query", "").lower() for w in ["new file", "create a file", "create file", "convert to", "convert "])
+            if (is_create_intent or is_cross_language) and task_dict.get("tool") == "edit":
+                task_dict["operation"] = "create"
 
-        if task_dict.get("target_file"):
-            tgt_path = Path(task_dict["target_file"])
-            project_root = Path(project_path).expanduser().resolve()
-            resolved_tgt = tgt_path if tgt_path.is_absolute() else (project_root / tgt_path).resolve()
-            try:
-                resolved_tgt.relative_to(project_root)
-            except ValueError:
-                task_dict["target_file"] = str(project_root / tgt_path.name)
+            if task_dict.get("operation") == "create":
+                tgt = task_dict.get("target_file")
+                if not tgt or (source_file and Path(tgt).name == Path(source_file).name):
+                    target_cand = None
+                    if state.get("user_query"):
+                        file_tokens = re.findall(r"[\w./\\-]+\.[A-Za-z0-9]+", state["user_query"])
+                        for tok in file_tokens:
+                            tok_clean = tok.strip("'\" ")
+                            if source_file and Path(tok_clean).name != Path(source_file).name:
+                                target_cand = tok_clean
+                                break
+
+                    if target_cand:
+                        task_dict["target_file"] = target_cand
+                    elif source_file:
+                        src_path = Path(source_file)
+                        ext_map = {"python": ".py", "java": ".java", "cpp": ".cpp", "javascript": ".js", "typescript": ".ts"}
+                        new_ext = ext_map.get(target_lang, src_path.suffix)
+                        task_dict["target_file"] = f"{src_path.stem}_v2{new_ext}" if new_ext == src_path.suffix else f"{src_path.stem}{new_ext}"
+
+            if task_dict.get("target_file"):
+                tgt_path = Path(task_dict["target_file"])
+                project_root = Path(project_path).expanduser().resolve()
+                resolved_tgt = tgt_path if tgt_path.is_absolute() else (project_root / tgt_path).resolve()
+                try:
+                    resolved_tgt.relative_to(project_root)
+                except ValueError:
+                    task_dict["target_file"] = str(project_root / tgt_path.name)
 
         # Infer scoped editing (symbol or line range) if not explicitly set
         if task_dict.get("tool") == "edit":
@@ -287,10 +305,34 @@ def route_model_node(state: EdgeMindState) -> EdgeMindState:
 def _resolve_in_project(path_str: str | None, project_path: str = ".") -> Path | None:
     if not path_str:
         return None
+    project_root = Path(project_path).expanduser().resolve()
     p = Path(path_str)
     if p.is_absolute():
+        if p.exists():
+            return p
+        # Check recursive match for basename if absolute path does not exist
+        search_name = p.name.lower()
+        for match in project_root.rglob("*"):
+            if match.is_file() and match.name.lower() == search_name:
+                from app.tools.file_discovery import IGNORED_DIRS
+                if not any(ign in match.parts for ign in IGNORED_DIRS) and not match.name.endswith(".bak"):
+                    return match.resolve()
         return p
-    return (Path(project_path).expanduser().resolve() / p).resolve()
+
+    # Direct relative check
+    direct = (project_root / p).resolve()
+    if direct.exists():
+        return direct
+
+    # Recursive check for basename in project subdirectories (e.g. models.py -> app/models.py)
+    search_name = p.name.lower()
+    for match in project_root.rglob("*"):
+        if match.is_file() and match.name.lower() == search_name:
+            from app.tools.file_discovery import IGNORED_DIRS
+            if not any(ign in match.parts for ign in IGNORED_DIRS) and not match.name.endswith(".bak"):
+                return match.resolve()
+
+    return direct
 
 
 def execute_task_node(state: EdgeMindState) -> EdgeMindState:
@@ -397,6 +439,9 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
             lang_label = target_lang.capitalize() if target_lang else "Code"
             ActivityStream.emit(f"Generating {lang_label} implementation...", EventType.PROGRESS, stage="executor")
 
+            from app.tools.framework_detector import detect_framework_and_stack
+            stack_info = detect_framework_and_stack(project_path)
+
             edit_req = EditRequest(
                 file_path=str(src_path) if src_path else str(project_root),
                 instruction=state.get("task_instruction") or state["user_query"],
@@ -414,6 +459,7 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                 scope_type=state.get("scope_type"),
                 search_block=state.get("search_block"),
                 replace_block=state.get("replace_block"),
+                project_framework=stack_info.get("summary"),
             )
 
             service = EditingService()

@@ -4,16 +4,41 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edgemind"
-version = "2.0.0"
+version = "2.0.1"
 description = "Resource-Aware Agentic Coding Assistant for Local AI Software Engineering"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { text = "MIT" }
 
 authors = [
     { name = "Akhilesh Venkiteswaran" }
 ]
 
-license = { text = "MIT" }
+keywords = [
+    "ai",
+    "agentic-ai",
+    "local-llm",
+    "ollama",
+    "coding-assistant",
+    "code-generation",
+    "langgraph",
+    "vscode-extension",
+    "developer-tools",
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
 
 dependencies = [
     "ollama",
@@ -24,11 +49,27 @@ dependencies = [
     "psutil",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "build",
+    "twine",
+]
+
+[project.urls]
+Homepage = "https://github.com/DarkFoot101/EdgeMind"
+Repository = "https://github.com/DarkFoot101/EdgeMind.git"
+Issues = "https://github.com/DarkFoot101/EdgeMind/issues"
+
 [project.scripts]
 edgemind = "app.cli.interactive:run"
+edgemind-rpc = "app.cli.rpc:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+"app" = ["extension/bundled/*", "extension/bundled/**/*"]
 
 [tool.pytest.ini_options]
 markers = [

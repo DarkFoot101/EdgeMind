@@ -59,6 +59,7 @@ class EditRequest:
     search_block: Optional[str] = None
     replace_block: Optional[str] = None
     candidates_count: int = 1
+    project_framework: Optional[str] = None
 
     def __post_init__(self):
         # 1. Normalize OperationType

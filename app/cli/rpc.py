@@ -12,6 +12,19 @@ import traceback
 from pathlib import Path
 from typing import Any, Dict
 
+# Enforce EdgeMind root priority and isolate 'app' package against workspace collisions
+_edgemind_root = str(Path(__file__).resolve().parent.parent.parent)
+if _edgemind_root in sys.path:
+    sys.path.remove(_edgemind_root)
+sys.path.insert(0, _edgemind_root)
+
+import app
+_edgemind_app_dir = str(Path(__file__).resolve().parent.parent)
+app.__path__ = [_edgemind_app_dir]
+
+if "app.models" in sys.modules and not hasattr(sys.modules["app.models"], "__path__"):
+    del sys.modules["app.models"]
+
 from app.editing.editing_service import EditingService
 from app.editing.models import EditRequest, EditResponse
 
@@ -32,6 +45,8 @@ def handle_request(req_data: Dict[str, Any], service: EditingService) -> Dict[st
         start_line = params.get("start_line")
         end_line = params.get("end_line")
         candidates_count = params.get("candidates_count", 1)
+        from app.tools.framework_detector import detect_framework_and_stack
+        stack_info = detect_framework_and_stack(project_path)
 
         req = EditRequest(
             file_path=file_path,
@@ -41,6 +56,7 @@ def handle_request(req_data: Dict[str, Any], service: EditingService) -> Dict[st
             start_line=start_line,
             end_line=end_line,
             candidates_count=candidates_count,
+            project_framework=stack_info.get("summary"),
         )
 
         resp = service.prepare_edit(req)
@@ -83,6 +99,22 @@ def handle_request(req_data: Dict[str, Any], service: EditingService) -> Dict[st
 
         applied = service.apply_edit(resp, file_path, force=force, project_path=project_path)
         return {"id": req_id, "result": {"success": applied}}
+
+    elif method == "get_models":
+        from app.models.config import get_configured_model, get_model_catalog
+        return {
+            "id": req_id,
+            "result": {
+                "active_model": get_configured_model() or "qwen2.5-coder:3b",
+                "catalog": get_model_catalog(),
+            },
+        }
+
+    elif method == "set_model":
+        model_name = params.get("model", "").strip()
+        from app.models.config import set_configured_model
+        chosen = set_configured_model(model_name)
+        return {"id": req_id, "result": {"active_model": chosen}}
 
     else:
         return {"id": req_id, "error": f"Unknown RPC method: {method}"}

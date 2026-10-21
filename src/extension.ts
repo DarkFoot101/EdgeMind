@@ -25,13 +25,20 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.languages.registerCodeLensProvider({ scheme: 'file' }, diffDecorator)
     );
 
-    // Status bar item
+    // Status bar item (shows active model and opens model picker on click)
     const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBarItem.text = '$(sparkle) EdgeMind';
-    statusBarItem.tooltip = 'EdgeMind Local AI Coding Assistant';
-    statusBarItem.command = 'edgemind.showStatus';
+    statusBarItem.tooltip = 'Click to switch EdgeMind Local AI Model';
+    statusBarItem.command = 'edgemind.selectModel';
     statusBarItem.show();
     context.subscriptions.push(statusBarItem);
+
+    // Initial model discovery for status bar
+    rpcClient.call('get_models').then(res => {
+        if (res && res.active_model) {
+            statusBarItem.text = `$(sparkle) EdgeMind: ${res.active_model}`;
+        }
+    }).catch(() => {});
 
     // Command 1: Inline AI Edit (Cmd+I)
     const inlineEditCmd = vscode.commands.registerCommand('edgemind.inlineEdit', async () => {
@@ -125,17 +132,30 @@ export function activate(context: vscode.ExtensionContext) {
         }
 
         try {
-            await editor.document.save();
-            await rpcClient!.call('apply_edit', {
-                file_path: targetFilePath,
-                modified_code: editor.document.getText(),
-                source_hash: targetSourceHash,
-                project_path: workspaceRoot,
-                force: true,
+            // Replace the editor content with clean modified code (removes red lines, retains green lines)
+            const fullRange = new vscode.Range(
+                editor.document.positionAt(0),
+                editor.document.positionAt(editor.document.getText().length)
+            );
+
+            await editor.edit(editBuilder => {
+                editBuilder.replace(fullRange, hunk.modifiedCode);
             });
 
             diffDecorator.clear(editor);
-            vscode.window.showInformationMessage('✓ EdgeMind: Changes accepted and saved to disk.');
+            await editor.document.save();
+
+            const fileProjectRoot = vscode.workspace.getWorkspaceFolder(editor.document.uri)?.uri.fsPath || workspaceRoot;
+
+            await rpcClient!.call('apply_edit', {
+                file_path: targetFilePath,
+                modified_code: hunk.modifiedCode,
+                source_hash: targetSourceHash,
+                project_path: fileProjectRoot,
+                force: true,
+            });
+
+            vscode.window.showInformationMessage('✓ EdgeMind: Changes accepted. Old code removed, new code saved.');
         } catch (err: any) {
             vscode.window.showErrorMessage(`Failed to save edit: ${err.message}`);
         }
@@ -144,23 +164,29 @@ export function activate(context: vscode.ExtensionContext) {
     // Command 3: Reject Diff (Esc)
     const rejectDiffCmd = vscode.commands.registerCommand('edgemind.rejectDiff', async () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor || !originalCodeSnapshot) {
+        const hunk = diffDecorator.getActiveHunk();
+        if (!editor || !hunk) {
             diffDecorator.clear();
             return;
         }
 
-        // Revert document to original snapshot
-        const fullRange = new vscode.Range(
-            editor.document.positionAt(0),
-            editor.document.positionAt(editor.document.getText().length)
-        );
+        try {
+            // Revert document to original code (removes green lines, restores original lines)
+            const fullRange = new vscode.Range(
+                editor.document.positionAt(0),
+                editor.document.positionAt(editor.document.getText().length)
+            );
 
-        await editor.edit(editBuilder => {
-            editBuilder.replace(fullRange, originalCodeSnapshot);
-        });
+            await editor.edit(editBuilder => {
+                editBuilder.replace(fullRange, hunk.originalCode);
+            });
 
-        diffDecorator.clear(editor);
-        vscode.window.showInformationMessage('✗ EdgeMind: Changes rejected. File was left untouched.');
+            diffDecorator.clear(editor);
+            await editor.document.save();
+            vscode.window.showInformationMessage('↶ EdgeMind: Changes rejected. Original code restored untouched.');
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to revert: ${err.message}`);
+        }
     });
 
     // Command 4: Show Status
@@ -173,7 +199,35 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    context.subscriptions.push(inlineEditCmd, acceptDiffCmd, rejectDiffCmd, statusCmd);
+    // Command 5: Select AI Model
+    const selectModelCmd = vscode.commands.registerCommand('edgemind.selectModel', async () => {
+        try {
+            const res = await rpcClient!.call('get_models');
+            const catalog = res.catalog || [];
+            const active = res.active_model || '';
+
+            const items: vscode.QuickPickItem[] = catalog.map((item: any) => ({
+                label: item.model,
+                description: item.parameter_size,
+                detail: `${item.size_gb}${item.model === active ? ' • [Active]' : ''}`,
+            }));
+
+            const selected = await vscode.window.showQuickPick(items, {
+                placeHolder: `Select active local LLM model for EdgeMind (Current: ${active})`,
+            });
+
+            if (selected) {
+                const chosenModel = selected.label;
+                await rpcClient!.call('set_model', { model: chosenModel });
+                statusBarItem.text = `$(sparkle) EdgeMind: ${chosenModel}`;
+                vscode.window.showInformationMessage(`✓ EdgeMind: Active model set to ${chosenModel}`);
+            }
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to fetch models: ${err.message}`);
+        }
+    });
+
+    context.subscriptions.push(inlineEditCmd, acceptDiffCmd, rejectDiffCmd, statusCmd, selectModelCmd);
 }
 
 export function deactivate() {

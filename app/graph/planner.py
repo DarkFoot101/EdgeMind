@@ -12,6 +12,7 @@ from typing import Any
 from app.graph.planner_schema import Plan, Task
 from app.models.model_router import select_model
 from app.models.ollama_client import generate_response
+from app.tools.framework_detector import detect_framework_and_stack
 
 PLANNER_SYSTEM_PROMPT = """You are the Lead Workflow Planner for EdgeMind V2, an intelligent local AI coding assistant.
 
@@ -26,6 +27,8 @@ RULES:
 6. Set 'operation' to 'modify' when updating an existing file in-place.
 7. Set 'source_file' and 'target_file' whenever identified or inferred.
 8. If target language differs from source language (e.g. Java -> Python), infer that 'create' operation with target_file is expected unless user explicitly asks to replace in-place.
+9. PREFER EXISTING FILES: Check the 'Existing Project Files' provided in context. If an existing file matches the requested responsibility (e.g. models in app/models.py, routes in app/main.py), ALWAYS set 'operation' to 'modify' and 'source_file' to that existing file. NEVER output a new file at root when a matching file exists in a subfolder.
+10. MULTI-FILE DECOMPOSITION: If the user request involves multiple architectural concerns (e.g., data models AND api routes/endpoints), decompose them into SEPARATE, distinct tasks targeting their respective existing files. NEVER dump routes and models together into a single file.
 
 AVAILABLE TOOLS:
 - analyze     : Analyze project structure, metrics, or files (operations: inspect, analyze)
@@ -391,12 +394,19 @@ def create_plan(
     user_query: str,
     memory: str = "",
     active_file: str = "",
+    project_path: str = ".",
 ) -> list[dict[str, Any]]:
     """
     Generate and validate a structured execution plan from local LLM output.
-    Uses model routing and automatic recovery retry logic.
+    Uses model routing, framework context injection, and automatic recovery retry logic.
     """
-    context_str = f"Active File Context: {active_file}\n" if active_file else ""
+    stack_info = detect_framework_and_stack(project_path)
+    context_str = f"Project Framework: {stack_info['summary']}\n"
+    if stack_info.get("key_files"):
+        context_str += f"Existing Project Files: {', '.join(stack_info['key_files'])}\n"
+
+    if active_file:
+        context_str += f"Active File Context: {active_file}\n"
     if memory:
         context_str += f"Project Memory:\n{memory}\n"
 

@@ -151,7 +151,7 @@ def resolve_best_file(
             if not any(ignored in active_path.parts for ignored in IGNORED_DIRS) and not active_path.name.endswith(".bak"):
                 return str(active_path)
 
-    # 2. Direct filename match in query
+    # 2. Direct filename match in query (e.g. models.py, main.py)
     if file_tokens:
         for token in file_tokens:
             token_clean = token.strip("'\" ")
@@ -160,13 +160,22 @@ def resolve_best_file(
                 if not any(ignored in candidate.parts for ignored in IGNORED_DIRS) and not candidate.name.endswith(".bak"):
                     return str(candidate.resolve())
 
-            # Check rglob match for basename
-            search_name = Path(token_clean).name
-            for match in project_root.rglob(search_name):
-                if match.is_file() and not any(ignored in match.parts for ignored in IGNORED_DIRS) and not match.name.endswith(".bak"):
+            # Case-insensitive recursive rglob match across subdirectories (e.g. app/models.py)
+            search_name = Path(token_clean).name.lower()
+            for match in project_root.rglob("*"):
+                if match.is_file() and match.name.lower() == search_name:
+                    if not any(ignored in match.parts for ignored in IGNORED_DIRS) and not match.name.endswith(".bak"):
+                        return str(match.resolve())
+
+    # 3. Match bare filename stems (e.g. user says "in models" or "update routes")
+    candidate_stems = {w.lower() for w in words if len(w) > 2 and w.lower() not in {"the", "and", "for", "code", "file", "test", "create", "modify", "update"}}
+    if candidate_stems:
+        for match in project_root.rglob("*"):
+            if match.is_file() and match.stem.lower() in candidate_stems:
+                if not any(ignored in match.parts for ignored in IGNORED_DIRS) and not match.name.endswith(".bak"):
                     return str(match.resolve())
 
-    # 3. Search candidates in project
+    # 4. Search candidates in project
     candidates = search_project_files(query, project_path, limit=5)
     if candidates:
         cand_path = (project_root / candidates[0]).resolve()

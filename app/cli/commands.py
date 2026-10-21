@@ -17,20 +17,96 @@ def show_help():
 
     print("help")
     print("status")
+    print("model [name]            : View and switch active Ollama model")
+    print("vscode / extension      : Install or update VS Code & Cursor extension")
     print("memory")
     print("clear")
-    print("review on / review off")
+    print("review on / review off  : Toggle manual red/green approval gate")
     print("setup")
     print("exit")
 
     print("\nExamples\n")
 
+    print("/model qwen2.5-coder:3b")
     print("Analyze this project")
     print("Explain app/models/model_router.py")
     print("Debug tests/sample_error.txt")
     print("Generate Dockerfile")
     print("Modify tests/sample_code.py")
     print()
+
+
+def show_model_menu(session, arg: str = ""):
+    """View installed Ollama models and switch active model."""
+    from app.models.config import clear_configured_model, get_configured_model, get_model_catalog, set_configured_model
+
+    catalog = get_model_catalog()
+    if not catalog:
+        print("\nNo local Ollama models detected. Please run 'ollama pull qwen2.5-coder:3b'.\n")
+        return
+
+    arg_clean = arg.strip()
+    if arg_clean:
+        if arg_clean.lower() in {"auto", "default", "clear"}:
+            clear_configured_model()
+            session.selected_model = "Auto-Routing"
+            print("\n✓ Active model reset to: Auto-Routing (Resource-aware dynamic selection)\n")
+            return
+
+        # Check if argument is a number
+        if arg_clean.isdigit():
+            idx = int(arg_clean) - 1
+            if 0 <= idx < len(catalog):
+                chosen = catalog[idx]["model"]
+                set_configured_model(chosen)
+                session.selected_model = chosen
+                print(f"\n✓ Active model set to: {chosen}\n")
+                return
+
+        # Direct model name
+        chosen = set_configured_model(arg_clean)
+        session.selected_model = chosen
+        print(f"\n✓ Active model set to: {chosen}\n")
+        return
+
+    # Interactive menu
+    print("\n" + "━" * 50)
+    print("EdgeMind AI Model Selector")
+    print("━" * 50)
+    print("Installed Local Ollama Models:\n")
+    for idx, item in enumerate(catalog, 1):
+        status_tag = " (Active)" if item["is_active"] else ""
+        print(f"  [{idx}] {item['model']}{status_tag} [{item['parameter_size']}, ~{item['size_gb']}]")
+    print("  [0] Auto-Routing (Dynamic selection based on task & RAM)")
+    print("━" * 50)
+
+    try:
+        choice = input(f"\nSelect model [0-{len(catalog)}] or enter model tag: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("\nModel selection cancelled.\n")
+        return
+
+    if not choice:
+        return
+
+    if choice == "0" or choice.lower() in {"auto", "default"}:
+        clear_configured_model()
+        session.selected_model = "Auto-Routing"
+        print("\n✓ Active model reset to: Auto-Routing\n")
+        return
+
+    if choice.isdigit():
+        idx = int(choice) - 1
+        if 0 <= idx < len(catalog):
+            chosen = catalog[idx]["model"]
+            set_configured_model(chosen)
+            session.selected_model = chosen
+            print(f"\n✓ Active model set to: {chosen}\n")
+            return
+
+    chosen = set_configured_model(choice)
+    session.selected_model = chosen
+    print(f"\n✓ Active model set to: {chosen}\n")
 
 
 def show_status(session):
@@ -88,3 +164,25 @@ def show_memory(session):
 
 def clear_terminal():
     print("\033c", end="")
+
+
+def install_extension_command():
+    """Install or update the EdgeMind extension into local VS Code & Cursor IDE environments."""
+    from app.extension.installer import install_extension
+
+    print("\n" + "━" * 50)
+    print("EdgeMind VS Code & Cursor Extension Installer")
+    print("━" * 50)
+    print("Installing extension into local IDE environments...")
+    res = install_extension(force=True)
+    if res.get("success"):
+        for loc in res.get("locations", []):
+            print(f"  ✓ Installed to: {loc}")
+        if res.get("vsix_path"):
+            print(f"  ✓ Standalone VSIX: {res['vsix_path']}")
+        print("\nSetup complete! To activate:")
+        print("  1. Open/Reload VS Code or Cursor.")
+        print("  2. In any code file, press Cmd+I (macOS) or Ctrl+I (Windows/Linux) to edit inline.")
+        print("  3. View the active model in the bottom status bar: $(sparkle) EdgeMind\n")
+    else:
+        print(f"\n✗ Extension installation failed: {res.get('error', 'Unknown error')}\n")

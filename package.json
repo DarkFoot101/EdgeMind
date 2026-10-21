@@ -36,6 +36,11 @@
                 "command": "edgemind.showStatus",
                 "title": "EdgeMind: Show Status",
                 "category": "EdgeMind"
+            },
+            {
+                "command": "edgemind.selectModel",
+                "title": "EdgeMind: Select AI Model",
+                "category": "EdgeMind"
             }
         ],
         "keybindings": [
