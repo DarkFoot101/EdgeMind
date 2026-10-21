@@ -13,7 +13,9 @@ import subprocess
 from typing import Any, Dict, List, Optional
 import zipfile
 
-EXTENSION_ID = "edgemind.edgemind-vscode-2.0.0"
+from app import __version__
+
+EXTENSION_ID = f"edgemind.edgemind-vscode-{__version__}"
 CONFIG_DIR = Path.home() / ".edgemind"
 
 
@@ -67,7 +69,7 @@ def build_vsix_package(output_path: Optional[Path] = None) -> Path:
     """
     source_dir = get_bundled_extension_path()
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    out_file = output_path or (CONFIG_DIR / "edgemind-vscode-2.0.0.vsix")
+    out_file = output_path or (CONFIG_DIR / f"edgemind-vscode-{__version__}.vsix")
 
     content_types_xml = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
@@ -82,9 +84,9 @@ def build_vsix_package(output_path: Optional[Path] = None) -> Path:
 
     vsix_manifest_xml = (
         '<?xml version="1.0" encoding="utf-8"?>\n'
-        '<PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">\n'
+        f'<PackageManifest Version="{__version__}" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011">\n'
         '  <Metadata>\n'
-        '    <Identity Id="edgemind-vscode" Version="2.0.0" Publisher="edgemind"/>\n'
+        f'    <Identity Id="edgemind-vscode" Version="{__version__}" Publisher="edgemind"/>\n'
         '    <DisplayName>EdgeMind AI</DisplayName>\n'
         '    <Description>Local Resource-Aware AI Coding Assistant for VS Code</Description>\n'
         '  </Metadata>\n'

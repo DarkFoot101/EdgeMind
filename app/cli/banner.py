@@ -4,7 +4,9 @@ Displays the startup screen for EdgeMind.
 """
 
 from pathlib import Path
+from app import __version__
 from app.resources.system_monitor import get_system_resources
+
 
 def print_banner() -> None:
     """
@@ -15,7 +17,7 @@ def print_banner() -> None:
 
     print("\n")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print("                    EdgeMind v1.0.4")
+    print(f"                    EdgeMind v{__version__}")
     print("      Resource-Aware Agentic Coding Assistant")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 

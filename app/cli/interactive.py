@@ -223,6 +223,12 @@ def prompt_user_approval(result_data: dict, project_path: str = ".") -> bool:
 
 
 def run():
+    # Handle version query immediately
+    if len(sys.argv) > 1 and sys.argv[1].lower() in {"--version", "-v", "version"}:
+        from app import __version__
+        print(f"EdgeMind v{__version__}")
+        return
+
     # Handle dedicated CLI subcommands / flags
     if len(sys.argv) > 1 and sys.argv[1].lower() in {
         "install-extension",
@@ -333,6 +339,11 @@ def run():
 
         if command == "help":
             show_help()
+            continue
+
+        if command in {"version", "/version", "--version", "-v"}:
+            from app import __version__
+            print(f"\nEdgeMind v{__version__}\n")
             continue
 
         if command in {"/vscode", "vscode", "/extension", "extension"}:
