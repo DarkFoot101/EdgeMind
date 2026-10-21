@@ -1,6 +1,6 @@
 <div align="center">
 
-# EdgeMind V2.0.1
+# EdgeMind V2.0.2
 
 ## Resource-Aware Agentic Coding Assistant for Local AI Software Engineering
 

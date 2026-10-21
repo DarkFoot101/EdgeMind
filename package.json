@@ -2,7 +2,7 @@
     "name": "edgemind-vscode",
     "displayName": "EdgeMind AI",
     "description": "Local Resource-Aware AI Coding Assistant for VS Code",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "publisher": "edgemind",
     "engines": {
         "vscode": "^1.88.0"
