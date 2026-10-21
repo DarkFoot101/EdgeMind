@@ -322,6 +322,8 @@ def sanitize_plan_tasks(plan: Plan, user_query: str, active_file: str = "") -> l
             task_dict["target_file"] = task_dict["target_file"].strip("'\" ")
         if task_dict.get("source_file") and isinstance(task_dict["source_file"], str):
             task_dict["source_file"] = task_dict["source_file"].strip("'\" ")
+        if task_dict.get("target_symbol") and isinstance(task_dict["target_symbol"], str):
+            task_dict["target_symbol"] = task_dict["target_symbol"].strip("() '\"")
 
         # Fix null or unknown tool
         tool = task_dict.get("tool")

@@ -25,7 +25,11 @@ def initialize_database() -> None:
             plan_json TEXT,
             result TEXT,
             diff_text TEXT,
-            success BOOLEAN
+            success BOOLEAN,
+            metrics_json TEXT,
+            scope_type TEXT,
+            source_hash TEXT,
+            modified_hash TEXT
         );
         """)
 
@@ -41,6 +45,10 @@ def initialize_database() -> None:
             ("operation", "TEXT"),
             ("plan_json", "TEXT"),
             ("diff_text", "TEXT"),
+            ("metrics_json", "TEXT"),
+            ("scope_type", "TEXT"),
+            ("source_hash", "TEXT"),
+            ("modified_hash", "TEXT"),
         ]
 
         for col_name, col_type in new_cols:

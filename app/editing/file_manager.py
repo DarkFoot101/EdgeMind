@@ -12,12 +12,18 @@ No AI logic should exist in this module.
 """
 
 from pathlib import Path
+import hashlib
 import os
 import shutil
 import tempfile
 
 
 BACKUP_DIR = Path(".edgemind/backups")
+
+
+def compute_sha256(content: str) -> str:
+    """Calculate the SHA-256 hash of a string content."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def get_project_root(project_path: str = ".") -> Path:
@@ -69,6 +75,11 @@ def read_file(file_path: str, project_path: str = ".") -> str:
     """Read the contents of an existing project file."""
     file = _resolve_project_file(file_path, project_path)
     return file.read_text(encoding="utf-8")
+
+
+def get_file_sha256(file_path: str, project_path: str = ".") -> str:
+    """Read an existing project file and return its SHA-256 hash."""
+    return compute_sha256(read_file(file_path, project_path))
 
 
 def backup_file(file_path: str, project_path: str = ".") -> str:

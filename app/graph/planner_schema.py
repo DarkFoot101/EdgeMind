@@ -45,6 +45,12 @@ class Task(BaseModel):
     source_language: Optional[str] = Field(default=None, description="Source programming language")
     target_language: Optional[str] = Field(default=None, description="Target programming language")
     verification_requirements: Optional[str] = Field(default=None, description="Optional verification criteria")
+    target_symbol: Optional[str] = Field(default=None, description="Target function, class, or symbol name")
+    start_line: Optional[int] = Field(default=None, description="Target starting line number (1-indexed)")
+    end_line: Optional[int] = Field(default=None, description="Target ending line number (1-indexed)")
+    scope_type: Optional[str] = Field(default=None, description="Scoping granularity: full_file, line_range, symbol, search_replace")
+    search_block: Optional[str] = Field(default=None, description="Search block for search-and-replace")
+    replace_block: Optional[str] = Field(default=None, description="Replacement block for search-and-replace")
 
 
 class Plan(BaseModel):

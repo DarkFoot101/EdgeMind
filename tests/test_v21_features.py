@@ -171,3 +171,42 @@ def test_sqlite_memory_rich_metadata():
     assert last_rec["intent"] == "execution"
     assert last_rec["source_file"] == "/tmp/test-project/algorithms.py"
     assert last_rec["success"] is True
+
+
+def test_scoped_planning_and_node_inference():
+    """Verify plan_refinement_node infers targeted symbol and line range from user prompt."""
+    from app.graph.nodes import plan_refinement_node, get_current_task_node
+
+    # 1. Inferred function symbol
+    state = {
+        "user_query": "Fix function calculate_tax in finance.py",
+        "project_path": ".",
+        "file_path": "finance.py",
+        "source_file": "finance.py",
+        "plan": [{"tool": "edit", "operation": "modify", "instruction": "Fix tax calculation"}],
+        "current_step": 0,
+    }
+    refined = plan_refinement_node(state)
+    task = refined["plan"][0]
+    assert task["target_symbol"] == "calculate_tax"
+    assert task["scope_type"] == "symbol"
+
+    task_state = get_current_task_node(refined)
+    assert task_state["target_symbol"] == "calculate_tax"
+    assert task_state["scope_type"] == "symbol"
+
+    # 2. Inferred line range
+    state_range = {
+        "user_query": "Refactor lines 15 to 30 in math.py",
+        "project_path": ".",
+        "file_path": "math.py",
+        "source_file": "math.py",
+        "plan": [{"tool": "edit", "operation": "modify", "instruction": "Refactor lines"}],
+        "current_step": 0,
+    }
+    refined_range = plan_refinement_node(state_range)
+    task_range = refined_range["plan"][0]
+    assert task_range["start_line"] == 15
+    assert task_range["end_line"] == 30
+    assert task_range["scope_type"] == "line_range"
+

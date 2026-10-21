@@ -29,6 +29,32 @@ def save_execution(state: dict[str, Any]) -> None:
     if edit_resp and getattr(edit_resp, "diff", None):
         diff_str = str(edit_resp.diff)
 
+    # Telemetry and scoping metadata extraction
+    metrics_json_str = ""
+    metrics_obj = state.get("metrics")
+    if not metrics_obj and edit_resp and getattr(edit_resp, "metrics", None):
+        metrics_obj = edit_resp.metrics
+    if metrics_obj:
+        try:
+            if hasattr(metrics_obj, "to_dict"):
+                metrics_json_str = json.dumps(metrics_obj.to_dict())
+            elif isinstance(metrics_obj, dict):
+                metrics_json_str = json.dumps(metrics_obj)
+            else:
+                metrics_json_str = str(metrics_obj)
+        except Exception:
+            metrics_json_str = ""
+
+    scope_type_str = ""
+    if state.get("scope_type"):
+        scope_type_str = str(state["scope_type"])
+    elif edit_resp and getattr(edit_resp, "scope", None):
+        st = getattr(edit_resp.scope, "scope_type", None)
+        scope_type_str = st.value if hasattr(st, "value") else str(st or "")
+
+    source_hash_str = state.get("source_hash") or (getattr(edit_resp, "source_hash", None) if edit_resp else "") or ""
+    modified_hash_str = state.get("modified_hash") or (getattr(edit_resp, "modified_hash", None) if edit_resp else "") or ""
+
     with closing(get_connection()) as connection, connection:
         connection.execute(
             """
@@ -46,9 +72,13 @@ def save_execution(state: dict[str, Any]) -> None:
                 plan_json,
                 result,
                 diff_text,
-                success
+                success,
+                metrics_json,
+                scope_type,
+                source_hash,
+                modified_hash
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 get_project_path(state.get("project_path", ".")),
@@ -64,6 +94,10 @@ def save_execution(state: dict[str, Any]) -> None:
                 result_text,
                 diff_str,
                 state.get("execution_success", False),
+                metrics_json_str,
+                scope_type_str,
+                source_hash_str,
+                modified_hash_str,
             ),
         )
 
@@ -107,7 +141,7 @@ def get_last_execution(project_path: str = ".") -> Optional[Dict[str, Any]]:
     with closing(get_connection()) as connection:
         row = connection.execute(
             """
-            SELECT user_query, task, intent, file_path, source_file, target_file, operation, selected_model, plan_json, result, diff_text, success
+            SELECT user_query, task, intent, file_path, source_file, target_file, operation, selected_model, plan_json, result, diff_text, success, metrics_json, scope_type, source_hash, modified_hash
             FROM task_history
             WHERE project_path = ?
             ORDER BY id DESC
@@ -118,6 +152,13 @@ def get_last_execution(project_path: str = ".") -> Optional[Dict[str, Any]]:
 
         if not row:
             return None
+
+        metrics = None
+        if len(row) > 12 and row[12]:
+            try:
+                metrics = json.loads(row[12])
+            except Exception:
+                metrics = {"raw": row[12]}
 
         return {
             "user_query": row[0],
@@ -132,4 +173,8 @@ def get_last_execution(project_path: str = ".") -> Optional[Dict[str, Any]]:
             "result": row[9],
             "diff_text": row[10],
             "success": bool(row[11]),
+            "metrics": metrics,
+            "scope_type": row[13] if len(row) > 13 else None,
+            "source_hash": row[14] if len(row) > 14 else None,
+            "modified_hash": row[15] if len(row) > 15 else None,
         }

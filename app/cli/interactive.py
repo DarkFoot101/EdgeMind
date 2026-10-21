@@ -24,6 +24,8 @@ from app.graph.workflow import workflow
 from app.routing.conversation_handler import handle_conversational, handle_follow_up
 from app.routing.intent_router import IntentType, detect_intent
 from app.tools.file_discovery import resolve_best_file
+from app.editing.diff_generator import colorize_diff
+from app.editing.editing_service import EditingService
 
 
 def format_change_review(state: dict, result_data: dict) -> str:
@@ -86,13 +88,24 @@ def format_change_review(state: dict, result_data: dict) -> str:
             output.append(f"  {detail}")
     else:
         success = result_data.get("execution_success", False)
-        output.append(f"  {'✓ Task executed successfully' if success else '✗ Execution failed'}")
+    # Telemetry & Performance Metrics
+    edit_resp = result_data.get("edit_response")
+    metrics = getattr(edit_resp, "metrics", None) if edit_resp else None
+    if metrics:
+        output.append("\nExecution Telemetry:")
+        output.append(f"  Duration : {metrics.inference_time_seconds:.2f}s")
+        if metrics.total_tokens:
+            output.append(f"  Tokens   : {metrics.total_tokens} (Prompt: {metrics.prompt_tokens}, Eval: {metrics.completion_tokens})")
+        if metrics.lines_added or metrics.lines_deleted:
+            output.append(f"  Delta    : +{metrics.lines_added} / -{metrics.lines_deleted} lines")
+        if metrics.peak_memory_mb:
+            output.append(f"  Memory   : {metrics.peak_memory_mb:.1f} MB (RSS)")
 
     # Result / Diff Content Output
     res_str = result_data.get("result", "")
-    output.append("\nResult Output:")
+    output.append("\nProposed Changes (Colorized Diff Preview):")
     output.append("-" * 60)
-    output.append(res_str if res_str else "(No text output)")
+    output.append(colorize_diff(res_str) if res_str else "(No text output)")
     output.append("-" * 60 + "\n")
 
     return "\n".join(output)
@@ -137,7 +150,61 @@ def create_state(session: SessionState, query: str) -> dict:
         "discovered_files": [],
         "review_status": None,
         "change_summary": None,
+        "target_symbol": None,
+        "start_line": None,
+        "end_line": None,
+        "scope_type": None,
+        "search_block": None,
+        "replace_block": None,
+        "require_approval": getattr(session, "require_approval", True),
+        "approval_pending": False,
     }
+
+
+def prompt_user_approval(result_data: dict, project_path: str = ".") -> bool:
+    """
+    Prompt user to accept or reject the proposed code modification.
+    Returns True if changes were applied, False if rejected.
+    """
+    edit_resp = result_data.get("edit_response")
+    if not edit_resp:
+        return True
+
+    dest_file = edit_resp.destination_path or edit_resp.file_path
+    print("━" * 60)
+    print(f"Interactive Review: {Path(dest_file).name}")
+    print("━" * 60)
+    print("  [a]ccept : Write and apply changes to disk")
+    print("  [r]eject : Discard changes (leave original file untouched)")
+    print("  [v]iew   : Display full proposed code with line numbers")
+    print("━" * 60)
+
+    while True:
+        try:
+            choice = input("Accept changes? [A/r/v]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\nOperation cancelled.")
+            return False
+
+        if choice in {"a", "accept", "y", "yes", ""}:
+            service = EditingService()
+            if result_data.get("operation") == "create":
+                service.create_file(edit_resp, project_path=project_path)
+            else:
+                service.apply_edit(edit_resp, edit_resp.destination_path, project_path=project_path)
+            print(f"\n✓ Changes applied to: {dest_file}\n")
+            return True
+        elif choice in {"r", "reject", "n", "no"}:
+            print(f"\n✗ Changes rejected. File '{dest_file}' was left untouched.\n")
+            return False
+        elif choice in {"v", "view"}:
+            print(f"\n--- Proposed Full Code for {dest_file} ---")
+            lines = (edit_resp.modified_code or "").splitlines()
+            for idx, line in enumerate(lines, 1):
+                print(f"{idx:4d} | {line}")
+            print("-" * 50 + "\n")
+        else:
+            print("Invalid input. Please enter 'a' to accept, 'r' to reject, or 'v' to view.")
 
 
 def run():
@@ -253,9 +320,19 @@ def run():
         if command in {"what changed", "what changed?", "show diff"}:
             if session.last_result:
                 print("\nLast Execution Output / Diff:\n")
-                print(session.last_result)
+                print(colorize_diff(session.last_result))
             else:
                 print("\nNo recent changes in session.\n")
+            continue
+
+        if command in {"/review on", "review on", "/approval on", "approval on"}:
+            session.require_approval = True
+            print("\n✓ Interactive Review Mode ENABLED. All code modifications will display a red/green diff for manual approval.\n")
+            continue
+
+        if command in {"/review off", "review off", "/approval off", "approval off"}:
+            session.require_approval = False
+            print("\n⚠ Interactive Review Mode DISABLED. Code modifications will be applied automatically.\n")
             continue
 
         update_session_context(session, query)
@@ -294,11 +371,50 @@ def run():
                 formatted_report = format_change_review(state, result_data)
                 print(formatted_report)
 
+                # Interactive confirmation gate if approval is pending
+                if result_data.get("approval_pending"):
+                    accepted = prompt_user_approval(result_data, project_path=session.project_path)
+                    if not accepted:
+                        result_data["execution_success"] = False
+                        result_data["result"] = "Changes were rejected by user."
+
                 active_file = (
                     result_data.get("modified_file")
                     or result_data.get("source_file")
                     or result_data.get("file_path")
                     or session.active_file
+                )
+
+                edit_resp = result_data.get("edit_response")
+                metrics_dict = None
+                if edit_resp and getattr(edit_resp, "metrics", None):
+                    metrics_dict = (
+                        edit_resp.metrics.to_dict()
+                        if hasattr(edit_resp.metrics, "to_dict")
+                        else edit_resp.metrics
+                    )
+                elif isinstance(result_data.get("metrics"), dict):
+                    metrics_dict = result_data.get("metrics")
+
+                scope_val = (
+                    (
+                        edit_resp.scope.scope_type.value
+                        if hasattr(edit_resp.scope.scope_type, "value")
+                        else str(edit_resp.scope.scope_type)
+                    )
+                    if edit_resp and getattr(edit_resp, "scope", None)
+                    else result_data.get("scope_type")
+                )
+
+                src_h = (
+                    getattr(edit_resp, "source_hash", None)
+                    if edit_resp
+                    else result_data.get("source_hash")
+                )
+                mod_h = (
+                    getattr(edit_resp, "modified_hash", None)
+                    if edit_resp
+                    else result_data.get("modified_hash")
                 )
 
                 session.remember(
@@ -309,6 +425,10 @@ def run():
                     model=result_data.get("selected_model"),
                     last_edited_file=result_data.get("modified_file"),
                     last_created_file=result_data.get("modified_file") if result_data.get("operation") == "create" else None,
+                    metrics=metrics_dict,
+                    scope=scope_val,
+                    source_hash=src_h,
+                    modified_hash=mod_h,
                 )
                 print(f"✓ Completed task using {session.selected_model or 'Ollama'}\n")
 

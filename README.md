@@ -1,6 +1,6 @@
 <div align="center">
 
-# EdgeMind V1.0.4
+# EdgeMind V2.0.0
 
 ## Resource-Aware Agentic Coding Assistant for Local AI Software Engineering
 
@@ -27,11 +27,17 @@ Modern AI coding assistants heavily rely on expensive cloud infrastructure, expo
 - **Agentic LangGraph Workflows**: Multi-step graph orchestration with autonomous file discovery, structured planning, disk inspection, and retry recovery.
 - **Resource-Aware Dynamic Model Router**: Automatically detects installed local models and matches tasks to available models without forcing unnecessary multi-GB downloads.
 - **Hardened Multi-Layer Verification**: AST syntax parsing, atomic disk writes, path security boundaries, and automatic backup preservation.
+- **Interactive Review & Human-in-the-Loop Approval**: Visual inline red/green diff review with atomic disk commits or non-destructive rollback.
 
 ---
 
 ## ✨ Core Features
 
+- 👁️ **Visual Review & Interactive Approval Gate**: Preview proposed modifications as colorized green/red unified diffs before disk writes. Accept or reject via `[a]ccept / [r]eject` in CLI or floating buttons in VS Code.
+- 🧩 **Native VS Code Extension**: Seamless inline red/green diff highlighting and floating `[✓ Accept (Cmd+Enter)]` / `[↶ Reject (Esc)]` controls directly inside your editor tab, backed by a zero-dependency local stdio IPC bridge.
+- 🎯 **Targeted Code Scoping**: Surgically target specific functions, classes, line ranges (`start_line`, `end_line`), or search/replace blocks without rewriting untouched file regions.
+- 🏆 **Best-of-N Candidate AST Verification**: Generates multiple patch candidates and uses deterministic AST validation and structural scoring to pick the highest quality patch.
+- 📊 **Telemetry & Performance Metrics**: Real-time measurement of inference latency, token counts, patch delta (+/- lines), and peak memory footprint.
 - 🧠 **Context-Aware Intent Routing**: Automatically classifies queries into `EXECUTION` (graph workflow), `FOLLOW_UP` (read-only change explanation), or `CONVERSATIONAL` (pair-programming mode).
 - ⚡ **Real-Time Activity Event Streaming**: Live progress events (`● Understanding request...`, `✓ Found bad.java`, `→ Analyze → Edit`, `✓ Syntax valid`) streamed directly to the CLI interface.
 - 🤖 **Intelligent Local Model Manager**: Auto-discovers installed Ollama models (`qwen2.5-coder`, `codellama`, `deepseek-coder`, `phi3`, `llama3`), using available models without mandatory downloads.
@@ -179,7 +185,30 @@ I converted bad.java into bad.py:
 No additional files were modified.
 ```
 
-#### Example 3: Single-Shot Subcommands
+#### Example 3: Interactive Visual Review (CLI)
+```text
+EdgeMind > /review on
+✓ Interactive Review Mode ENABLED. All code modifications will display a red/green diff for manual approval.
+
+EdgeMind > Refactor calculate_total to apply 10% tax
+...
+Proposed Changes (Colorized Diff Preview):
+------------------------------------------------------------
+-def calculate_total(subtotal):
+-    return subtotal
++def calculate_total(subtotal: float) -> float:
++    tax = subtotal * 0.10
++    return subtotal + tax
+------------------------------------------------------------
+Interactive Review: order.py
+  [a]ccept : Write and apply changes to disk
+  [r]eject : Discard changes (leave original file untouched)
+  [v]iew   : Display full proposed code with line numbers
+Accept changes? [A/r/v]: a
+✓ Changes applied to: order.py
+```
+
+#### Example 4: Single-Shot Subcommands
 ```bash
 # Analyze project structure and resources
 edgemind analyze .
@@ -202,13 +231,33 @@ edgemind generate-compose .
 
 ---
 
+## 🧩 Native VS Code Extension
+
+EdgeMind includes a native VS Code extension directly inside the repository for an IDE-native inline pair programming experience:
+
+### Features:
+- **Inline Green/Red Diff Highlighting**: View additions (green) and removals (red) highlighted inline directly in your editor tab.
+- **Floating Action Controls (CodeLens)**: Single-click `[✓ Accept (Cmd+Enter)]` or `[↶ Reject (Esc)]` floating controls above the diff.
+- **Selection-Aware Scoping**: Highlight any function or line range (<kbd>Cmd</kbd>+<kbd>I</kbd>) to scope edits strictly to those lines.
+- **Zero-Dependency IPC Bridge**: Communicates via standard I/O with EdgeMind's local Python daemon (`app.cli.rpc`), with zero external npm runtime dependencies and hardened supply-chain configs (`ignore-scripts=true`).
+
+### Running the Extension:
+1. Compile TypeScript:
+   ```bash
+   npm run compile
+   ```
+2. Press **`F5`** in VS Code to open the **`[Extension Development Host]`** window.
+3. Open any file in your project, highlight code, and press **<kbd>Cmd</kbd> + <kbd>I</kbd>**.
+
+---
+
 ## 📂 Project Structure
 
 ```text
 EdgeMind/
 ├── app/
-│   ├── cli/             # Interactive shell, banner, commands, main Typer CLI
-│   ├── editing/         # Editing service, file manager, modifier, validator, diffs
+│   ├── cli/             # Interactive shell, banner, commands, JSON-RPC stdio daemon
+│   ├── editing/         # Editing service, file manager, modifier, validator, candidate ranker, scope
 │   ├── events/          # Real-time activity streaming event system
 │   ├── graph/           # LangGraph nodes, planner V2, state schema, workflow compilation
 │   ├── memory/          # SQLite database schema, connections, memory manager
@@ -218,11 +267,13 @@ EdgeMind/
 │   ├── scripts/         # Graph export utilities
 │   ├── setup/           # Prerequisites check & setup wizard
 │   └── tools/           # Autonomous file discovery, scanner, analyzer, generators
+├── src/                 # VS Code extension TypeScript source (diffDecorator, rpcClient, extension)
 ├── tests/               # Unit, adversarial, agentic, and integration test suite
 ├── .github/workflows/   # CI/CD and automated PyPI release workflows
 ├── ARCHITECTURE.md      # Detailed system architecture blueprint
 ├── FUNCTION_REFERENCE.md# Complete technical function and class reference
 ├── WORKFLOWS.md         # Workflow sequence diagrams and call-flow documentation
+├── package.json         # VS Code extension manifest & commands
 └── pyproject.toml       # Package configuration & PyPI release metadata
 ```
 

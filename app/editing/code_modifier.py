@@ -1,12 +1,26 @@
 """
-EdgeMind Code Modifier V2
+EdgeMind Code Modifier V2.1
 
-Generates modified or converted source code using local Ollama LLMs.
+Generates modified, converted, or scoped source code using local Ollama LLMs.
+Supports:
+- Full file modification / conversion
+- Targeted line range editing
+- Symbol-level AST editing (functions/classes)
+- Search-and-replace block substitution
 Never writes files directly.
 """
 
 import re
+from typing import List, Optional
+
 from app.editing.models import EditRequest
+from app.editing.scope import (
+    EditScopeType,
+    apply_search_and_replace,
+    extract_code_slice,
+    extract_symbol_range,
+    splice_code_slice,
+)
 from app.models.ollama_client import generate_response
 
 
@@ -51,17 +65,117 @@ def clean_generated_code(code: str) -> str:
     return text.strip()
 
 
-def modify_code(request: EditRequest) -> str:
+def modify_code(request: EditRequest, options: Optional[dict] = None) -> str:
     """
     Generate updated or converted source code via local LLM.
-    Propagates analysis findings into prompt if available.
+    Dispatches to targeted scope handlers if scoped editing is specified.
     """
+    scope = getattr(request, "scope", None)
+    scope_type = scope.scope_type if scope else EditScopeType.FULL_FILE
+
+    # 1. Handle targeted search-and-replace
+    if scope_type == EditScopeType.SEARCH_REPLACE and scope and scope.search_block:
+        if scope.replace_block is not None:
+            success, spliced = apply_search_and_replace(
+                request.source_code,
+                scope.search_block,
+                scope.replace_block,
+            )
+            if success:
+                return spliced
+
+        # Generate replacement for search_block via LLM
+        prompt = f"""User Instruction:
+{request.instruction}
+
+Target Code Block to Modify:
+```{request.source_language}
+{scope.search_block}
+```
+
+Return ONLY the replacement code for this block.
+"""
+        system_prompt = (
+            "You are a Senior Software Engineer. Modify the provided code block according to instructions. "
+            "Return ONLY the replacement block. No markdown, no explanations."
+        )
+        kwargs = {"prompt": prompt, "model": request.model, "system_prompt": system_prompt}
+        if options:
+            kwargs["options"] = options
+        raw = generate_response(**kwargs)
+        cleaned_replacement = clean_generated_code(raw)
+        success, spliced = apply_search_and_replace(
+            request.source_code,
+            scope.search_block,
+            cleaned_replacement,
+        )
+        if success:
+            return spliced
+
+    # 2. Handle targeted line range editing
+    if scope_type == EditScopeType.LINE_RANGE and scope and scope.start_line is not None:
+        total_lines = len(request.source_code.splitlines())
+        start_ln = max(1, scope.start_line)
+        end_ln = min(total_lines, scope.end_line or scope.start_line)
+        target_slice = extract_code_slice(request.source_code, start_ln, end_ln)
+
+        prompt = f"""User Instruction:
+{request.instruction}
+
+Target Code Slice (Lines {start_ln}-{end_ln} of {request.file_path}):
+```{request.source_language}
+{target_slice}
+```
+
+Return ONLY the updated replacement lines for lines {start_ln} to {end_ln}.
+Preserve indentation and do not include code from outside this line range.
+"""
+        system_prompt = (
+            f"You are modifying lines {start_ln} to {end_ln} of a {request.source_language} file. "
+            "Output ONLY the replacement code for this slice. No markdown fences, no explanation."
+        )
+        kwargs = {"prompt": prompt, "model": request.model, "system_prompt": system_prompt}
+        if options:
+            kwargs["options"] = options
+        raw = generate_response(**kwargs)
+        cleaned_slice = clean_generated_code(raw)
+        return splice_code_slice(request.source_code, cleaned_slice, start_ln, end_ln)
+
+    # 3. Handle targeted AST symbol editing
+    if scope_type == EditScopeType.SYMBOL and scope and scope.target_symbol:
+        rng = extract_symbol_range(request.source_code, scope.target_symbol, request.source_language)
+        if rng:
+            start_ln, end_ln = rng
+            symbol_code = extract_code_slice(request.source_code, start_ln, end_ln)
+
+            prompt = f"""User Instruction:
+{request.instruction}
+
+Target Symbol Definition '{scope.target_symbol}' (Lines {start_ln}-{end_ln}):
+```{request.source_language}
+{symbol_code}
+```
+
+Return ONLY the modified implementation of '{scope.target_symbol}'.
+"""
+            system_prompt = (
+                f"You are modifying the definition of {scope.target_symbol} in a {request.source_language} file. "
+                "Output ONLY the complete modified symbol definition. No markdown fences, no commentary."
+            )
+            kwargs = {"prompt": prompt, "model": request.model, "system_prompt": system_prompt}
+            if options:
+                kwargs["options"] = options
+            raw = generate_response(**kwargs)
+            cleaned_symbol = clean_generated_code(raw)
+            return splice_code_slice(request.source_code, cleaned_symbol, start_ln, end_ln)
+
+    # 4. Fallback / Default: Full-File Generation
     system_prompt = f"""You are a Principal Software Engineer.
 Your task is to modify or convert source code strictly according to user instructions.
 
 Original Language: {request.source_language}
 Target Language: {request.target_language}
-Operation Mode: {request.operation.upper()}
+Operation Mode: {str(request.operation).upper()}
 
 RULES:
 1. Return ONLY the complete updated/converted target source code.
@@ -90,10 +204,35 @@ Source Code Data:
 Return the complete modified or converted source code in target language ({request.target_language}).
 """
 
-    raw_response = generate_response(
-        prompt=prompt,
-        model=request.model,
-        system_prompt=system_prompt,
-    )
+    kwargs = {"prompt": prompt, "model": request.model, "system_prompt": system_prompt}
+    if options:
+        kwargs["options"] = options
+    raw_response = generate_response(**kwargs)
 
     return clean_generated_code(raw_response)
+
+
+def generate_candidate_patches(request: EditRequest, count: int = 1) -> List[str]:
+    """
+    Generate multiple candidate patches using local LLM with varying temperature schedules.
+    Provides Best-of-N candidate sampling.
+    """
+    if count <= 1:
+        return [modify_code(request)]
+
+    candidates: List[str] = []
+    # Primary deterministic generation
+    primary = modify_code(request)
+    candidates.append(primary)
+
+    temps = [0.3, 0.6, 0.8, 1.0]
+    for i in range(1, count):
+        temp = temps[(i - 1) % len(temps)]
+        try:
+            cand = modify_code(request, options={"temperature": temp})
+            if cand:
+                candidates.append(cand)
+        except Exception:
+            break
+
+    return candidates

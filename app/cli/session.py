@@ -25,6 +25,11 @@ class SessionState:
     last_plan: list[dict] = field(default_factory=list)
     last_edited_file: str | None = None
     last_created_file: str | None = None
+    last_metrics: dict | None = None
+    last_scope: str | None = None
+    last_source_hash: str | None = None
+    last_modified_hash: str | None = None
+    require_approval: bool = True
 
     # Conversation log
     memory_enabled: bool = True
@@ -39,6 +44,10 @@ class SessionState:
         model: str | None = None,
         last_edited_file: str | None = None,
         last_created_file: str | None = None,
+        metrics: dict | None = None,
+        scope: str | None = None,
+        source_hash: str | None = None,
+        modified_hash: str | None = None,
     ):
         self.last_query = query
         self.last_result = result
@@ -50,6 +59,14 @@ class SessionState:
             self.last_edited_file = last_edited_file
         if last_created_file is not None:
             self.last_created_file = last_created_file
+        if metrics is not None:
+            self.last_metrics = metrics
+        if scope is not None:
+            self.last_scope = scope
+        if source_hash is not None:
+            self.last_source_hash = source_hash
+        if modified_hash is not None:
+            self.last_modified_hash = modified_hash
 
         if file_path:
             self.active_file = file_path
@@ -66,4 +83,8 @@ class SessionState:
         self.last_plan.clear()
         self.last_edited_file = None
         self.last_created_file = None
+        self.last_metrics = None
+        self.last_scope = None
+        self.last_source_hash = None
+        self.last_modified_hash = None
         self.conversation_history.clear()

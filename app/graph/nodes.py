@@ -195,6 +195,37 @@ def plan_refinement_node(state: EdgeMindState) -> EdgeMindState:
             except ValueError:
                 task_dict["target_file"] = str(project_root / tgt_path.name)
 
+        # Infer scoped editing (symbol or line range) if not explicitly set
+        if task_dict.get("tool") == "edit":
+            if not task_dict.get("target_symbol"):
+                sym_match = re.search(
+                    r"\b(?:function|def|method|class|symbol)\s+([a-zA-Z_]\w*)\b",
+                    state.get("user_query", ""),
+                    re.IGNORECASE,
+                )
+                if not sym_match:
+                    sym_match = re.search(
+                        r"\b([a-zA-Z_]\w*)\s+(?:function|method|class)\b",
+                        state.get("user_query", ""),
+                        re.IGNORECASE,
+                    )
+                if sym_match:
+                    cand_sym = sym_match.group(1).strip("() '\"")
+                    if cand_sym.lower() not in {"the", "a", "an", "this", "that", "python", "java", "main", "new"}:
+                        task_dict["target_symbol"] = cand_sym
+                        task_dict["scope_type"] = "symbol"
+
+            if not task_dict.get("start_line"):
+                range_match = re.search(
+                    r"\blines?\s+(\d+)\s*(?:to|-)\s*(\d+)\b",
+                    state.get("user_query", ""),
+                    re.IGNORECASE,
+                )
+                if range_match:
+                    task_dict["start_line"] = int(range_match.group(1))
+                    task_dict["end_line"] = int(range_match.group(2))
+                    task_dict["scope_type"] = "line_range"
+
         refined_plan.append(task_dict)
 
     state["plan"] = refined_plan
@@ -212,6 +243,12 @@ def get_current_task_node(state: EdgeMindState) -> EdgeMindState:
         state["task_instruction"] = ""
         state["target_file"] = None
         state["operation"] = "modify"
+        state["target_symbol"] = None
+        state["start_line"] = None
+        state["end_line"] = None
+        state["scope_type"] = None
+        state["search_block"] = None
+        state["replace_block"] = None
         return state
 
     task = plan[step]
@@ -230,6 +267,13 @@ def get_current_task_node(state: EdgeMindState) -> EdgeMindState:
     state["target_file"] = task.get("target_file")
     state["source_language"] = task.get("source_language") or (detect_language(src) if src else "python")
     state["target_language"] = task.get("target_language") or state["source_language"]
+
+    state["target_symbol"] = task.get("target_symbol")
+    state["start_line"] = task.get("start_line")
+    state["end_line"] = task.get("end_line")
+    state["scope_type"] = task.get("scope_type")
+    state["search_block"] = task.get("search_block")
+    state["replace_block"] = task.get("replace_block")
     return state
 
 
@@ -364,6 +408,12 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                 create_backup=(operation != "create"),
                 analysis_result=state.get("analysis_result"),
                 project_path=project_path,
+                target_symbol=state.get("target_symbol"),
+                start_line=state.get("start_line"),
+                end_line=state.get("end_line"),
+                scope_type=state.get("scope_type"),
+                search_block=state.get("search_block"),
+                replace_block=state.get("replace_block"),
             )
 
             service = EditingService()
@@ -374,6 +424,15 @@ def execute_task_node(state: EdgeMindState) -> EdgeMindState:
                 state["result"] = f"Edit preparation failed:\n{response.error}"
                 state["execution_success"] = False
                 ActivityStream.emit("Edit preparation failed", EventType.ERROR, stage="executor")
+                return state
+
+            # If user approval is required, hold disk write until interactive confirmation
+            if state.get("require_approval", False):
+                state["modified_file"] = response.destination_path
+                state["result"] = response.diff
+                state["approval_pending"] = True
+                state["execution_success"] = True
+                ActivityStream.emit("Edit preview prepared (pending user approval)", EventType.SUCCESS, stage="executor")
                 return state
 
             if operation == "create":
@@ -447,6 +506,21 @@ def reviewer_node(state: EdgeMindState) -> EdgeMindState:
         if not edit_resp or not edit_resp.success:
             overall_success = False
             review_details.append("Edit preparation failed.")
+
+        if state.get("approval_pending", False):
+            if edit_resp and edit_resp.success:
+                fname = mod_path.name if mod_path else (Path(source_file).name if source_file else "file")
+                review_details.append(f"✓ Edit preview generated for {fname} (Pending User Approval)")
+                if edit_resp.validation_message:
+                    review_details.append(f"✓ Syntax validation passed: {edit_resp.validation_message}")
+                ActivityStream.emit("Preview verified (awaiting approval)", EventType.SUCCESS, stage="reviewer")
+            state["review_status"] = {
+                "success": overall_success,
+                "task": task,
+                "operation": operation,
+                "details": review_details,
+            }
+            return state
 
         if operation == "create":
             if src_path and src_path.exists():
