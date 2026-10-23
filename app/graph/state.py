@@ -40,3 +40,8 @@ class EdgeMindState(TypedDict):
     replace_block: Optional[str]
     require_approval: Optional[bool]
     approval_pending: Optional[bool]
+    react_iteration: Optional[int]
+    max_react_iterations: Optional[int]
+    needs_react_followup: Optional[bool]
+    react_feedback: Optional[str]
+    react_history: Optional[list[dict]]

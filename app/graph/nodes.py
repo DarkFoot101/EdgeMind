@@ -23,7 +23,7 @@ from app.editing.models import EditRequest
 from app.editing.scope import infer_target_symbol_from_code
 from app.editing.validator import detect_language, validate_code
 from app.events.activity_stream import ActivityStream, EventType
-from app.graph.evaluator import evaluate_execution
+from app.graph.evaluator import evaluate_execution, verify_react_step
 from app.graph.planner import create_plan
 from app.graph.state import EdgeMindState
 from app.memory.memory_manager import save_execution, search_memory
@@ -637,11 +637,38 @@ def reviewer_node(state: EdgeMindState) -> EdgeMindState:
 
 
 def evaluate_task_node(state: EdgeMindState) -> EdgeMindState:
-    """Evaluate overall execution and review status."""
+    """
+    Evaluate overall execution, review status, and perform ReAct requirement reflection.
+    If the requirement is partially satisfied or needs follow-up, triggers an iterative loop.
+    """
     task = state.get("current_task")
     if task == "edit":
         review = state.get("review_status") or {}
         success = review.get("success", False)
+
+        if success:
+            react_res = verify_react_step(state)
+            if not react_res.get("satisfied") and react_res.get("followup_needed"):
+                iter_count = state.get("react_iteration", 0) + 1
+                state["react_iteration"] = iter_count
+                state["needs_react_followup"] = True
+                ActivityStream.emit(
+                    f"ReAct Reflection #{iter_count}: {react_res.get('reason')}",
+                    EventType.PROGRESS,
+                    stage="evaluator",
+                )
+                followup = react_res.get("followup_task")
+                if followup:
+                    cur_step = state.get("current_step", 0)
+                    plan = list(state.get("plan", []))
+                    plan.insert(cur_step + 1, followup)
+                    state["plan"] = plan
+            elif react_res.get("satisfied") and state.get("react_iteration", 0) > 0:
+                ActivityStream.emit(
+                    "ReAct Loop complete: all requirements and symbols satisfied",
+                    EventType.SUCCESS,
+                    stage="evaluator",
+                )
     else:
         success = evaluate_execution(state.get("result")) and state.get("execution_success", False)
 
@@ -671,6 +698,10 @@ def advance_step_node(state: EdgeMindState) -> EdgeMindState:
 
 def should_continue(state: EdgeMindState) -> str:
     """Determine routing after evaluator/reviewer."""
+    if state.get("needs_react_followup", False):
+        state["needs_react_followup"] = False
+        return "continue"
+
     if not state.get("execution_success", False):
         if state.get("retry_count", 0) < state.get("max_retry", 2):
             return "retry"
