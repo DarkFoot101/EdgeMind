@@ -176,6 +176,38 @@ def create_state(session: SessionState, query: str) -> dict:
     }
 
 
+def open_gui_diff(original_path: str, proposed_code: str) -> bool:
+    """Attempt to open an editor GUI side-by-side diff in VS Code, Cursor, or Antigravity IDE."""
+    import tempfile
+    import subprocess
+    import shutil
+
+    suffix = Path(original_path).suffix or ".txt"
+    try:
+        temp_f = tempfile.NamedTemporaryFile("w", delete=False, suffix=f"_edgemind_proposed{suffix}", encoding="utf-8")
+        temp_f.write(proposed_code)
+        temp_f.close()
+    except Exception:
+        return False
+
+    cli_candidates = [
+        shutil.which("antigravity"),
+        shutil.which("code"),
+        shutil.which("cursor"),
+        "/Applications/Antigravity IDE.app/Contents/Resources/app/bin/code",
+        "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+        "/Applications/Cursor.app/Contents/Resources/app/bin/cursor",
+    ]
+    for cand in cli_candidates:
+        if cand and Path(cand).exists():
+            try:
+                subprocess.Popen([str(cand), "--diff", str(original_path), temp_f.name])
+                return True
+            except Exception:
+                continue
+    return False
+
+
 def prompt_user_approval(result_data: dict, project_path: str = ".") -> bool:
     """
     Prompt user to accept or reject the proposed code modification.
@@ -191,12 +223,15 @@ def prompt_user_approval(result_data: dict, project_path: str = ".") -> bool:
     print("━" * 60)
     print("  [a]ccept : Write and apply changes to disk")
     print("  [r]eject : Discard changes (leave original file untouched)")
-    print("  [v]iew   : Display full proposed code with line numbers")
+    print("  [v]iew   : Display full proposed code in terminal")
+    print("  [d]iff   : Open side-by-side visual diff in editor GUI")
     print("━" * 60)
+    print("💡 Tip: For native GUI with inline red/green preview and floating [✓ Accept] / [↶ Reject]")
+    print("   buttons directly in your editor tab, press Cmd+I (or Ctrl+I) on any code file.\n")
 
     while True:
         try:
-            choice = input("Accept changes? [A/r/v]: ").strip().lower()
+            choice = input("Accept changes? [A/r/v/d]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print("\nOperation cancelled.")
             return False
@@ -218,8 +253,16 @@ def prompt_user_approval(result_data: dict, project_path: str = ".") -> bool:
             for idx, line in enumerate(lines, 1):
                 print(f"{idx:4d} | {line}")
             print("-" * 50 + "\n")
+        elif choice in {"d", "diff"}:
+            opened = open_gui_diff(dest_file, edit_resp.modified_code or "")
+            if opened:
+                print(f"\n✓ Opened GUI side-by-side visual diff in editor for '{Path(dest_file).name}'.")
+            else:
+                print("\nDisplaying colorized diff preview:")
+                print(colorize_diff(edit_resp.diff or ""))
+            print("Return here and enter 'a' to accept or 'r' to reject.\n")
         else:
-            print("Invalid input. Please enter 'a' to accept, 'r' to reject, or 'v' to view.")
+            print("Invalid input. Please enter 'a' to accept, 'r' to reject, 'v' to view, or 'd' for GUI diff.")
 
 
 def run():

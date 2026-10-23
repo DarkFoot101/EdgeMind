@@ -192,3 +192,70 @@ def apply_search_and_replace(original_code: str, search_block: str, replace_bloc
             return True, res
 
     return False, original_code
+
+
+def infer_target_symbol_from_code(code: str, query: str, language: str = "python") -> Optional[str]:
+    """
+    Intelligently infer if a user's prompt targets a specific symbol (class or function)
+    defined in the source code.
+
+    Extracts all symbol definitions from the code AST (or lexical regex) and checks
+    if any of those symbol names are mentioned in the user query.
+    Prevents destructive full-file rewrites by scoping edits directly to the symbol.
+    """
+    if not code or not query:
+        return None
+
+    symbols: list[str] = []
+    lang = (language or "python").lower()
+
+    if lang == "python":
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                    if not node.name.startswith("__"):  # skip dunder methods
+                        symbols.append(node.name)
+        except Exception:
+            pass
+
+    # Generic regex fallback for non-Python or broken Python syntax
+    if not symbols:
+        lines = code.splitlines()
+        pattern = re.compile(r"\b(?:class|def|function|interface|struct)\s+([a-zA-Z_]\w*)\b")
+        for line in lines:
+            m = pattern.search(line)
+            if m:
+                sym = m.group(1)
+                if sym not in symbols:
+                    symbols.append(sym)
+
+    if not symbols:
+        return None
+
+    stopwords = {
+        "the", "a", "an", "is", "in", "to", "for", "of", "and", "or", "new",
+        "code", "file", "add", "update", "modify", "fix", "change", "create",
+        "delete", "remove", "get", "set", "make", "test", "data", "app",
+    }
+
+    # Find symbols mentioned in query with word boundary matching
+    matched: list[str] = []
+    for sym in symbols:
+        if sym.lower() in stopwords:
+            continue
+        if re.search(rf"\b{re.escape(sym)}\b", query, re.IGNORECASE):
+            matched.append(sym)
+
+    if not matched:
+        return None
+
+    # Disambiguation:
+    # 1. Exact case match in query
+    exact_case = [s for s in matched if re.search(rf"\b{re.escape(s)}\b", query)]
+    if exact_case:
+        # Prefer longest symbol name if multiple exact matches (e.g. PostCRUD vs Post)
+        return max(exact_case, key=len)
+
+    # 2. Return longest matching symbol name
+    return max(matched, key=len)

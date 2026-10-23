@@ -20,6 +20,7 @@ from typing import Any
 
 from app.editing.editing_service import EditingService
 from app.editing.models import EditRequest
+from app.editing.scope import infer_target_symbol_from_code
 from app.editing.validator import detect_language, validate_code
 from app.events.activity_stream import ActivityStream, EventType
 from app.graph.evaluator import evaluate_execution
@@ -232,6 +233,24 @@ def plan_refinement_node(state: EdgeMindState) -> EdgeMindState:
                     if cand_sym.lower() not in {"the", "a", "an", "this", "that", "python", "java", "main", "new"}:
                         task_dict["target_symbol"] = cand_sym
                         task_dict["scope_type"] = "symbol"
+
+                # If still not found, inspect AST of source_file against user_query
+                if not task_dict.get("target_symbol") and task_dict.get("source_file"):
+                    src_f = _resolve_in_project(task_dict["source_file"], project_path)
+                    if src_f and src_f.exists() and src_f.is_file():
+                        try:
+                            src_text = src_f.read_text(encoding="utf-8", errors="ignore")
+                            inferred_sym = infer_target_symbol_from_code(
+                                src_text,
+                                state.get("user_query", ""),
+                                task_dict.get("source_language", "python")
+                            )
+                            if inferred_sym:
+                                task_dict["target_symbol"] = inferred_sym
+                                task_dict["scope_type"] = "symbol"
+                                ActivityStream.emit(f"Scoped edit to symbol '{inferred_sym}'", EventType.PROGRESS, stage="plan_refinement")
+                        except Exception:
+                            pass
 
             if not task_dict.get("start_line"):
                 range_match = re.search(

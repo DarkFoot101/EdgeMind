@@ -35,13 +35,16 @@ def get_bundled_extension_path() -> Path:
 
 def get_target_extension_dirs() -> List[Path]:
     """
-    Return candidate directories where VS Code, Cursor, and VSCodium store user extensions.
+    Return candidate directories where VS Code, Antigravity IDE, Cursor, and VSCodium store user extensions.
     Includes ~/.vscode/extensions by default so fresh environments are supported.
     """
     home = Path.home()
     candidates = [
+        home / ".antigravity-ide" / "extensions",
+        home / ".antigravity" / "extensions",
         home / ".vscode" / "extensions",
         home / ".cursor" / "extensions",
+        home / ".windsurf" / "extensions",
         home / ".vscode-insiders" / "extensions",
         home / ".vscode-oss" / "extensions",
     ]

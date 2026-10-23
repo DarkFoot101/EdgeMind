@@ -498,3 +498,93 @@ def test_rpc_bridge_handlers(tmp_path, monkeypatch):
     err_req = {"id": 4, "method": "unknown_action", "params": {}}
     err_resp = handle_request(err_req, service)
     assert "error" in err_resp
+
+
+def test_infer_target_symbol_from_code():
+    from app.editing.scope import infer_target_symbol_from_code
+
+    code = """
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Optional, List
+
+class Post(BaseModel):
+    title: str
+    content: str
+    published: bool = True
+
+class PostCRUD:
+    def __init__(self):
+        self.posts = []
+    def get_posts(self) -> List[Post]:
+        return self.posts
+"""
+    # 1. Matching 'Post'
+    sym = infer_target_symbol_from_code(code, "add rating to Post")
+    assert sym == "Post"
+
+    # 2. Matching 'PostCRUD'
+    sym2 = infer_target_symbol_from_code(code, "update PostCRUD to add delete_post")
+    assert sym2 == "PostCRUD"
+
+    # 3. Matching function 'get_posts'
+    sym3 = infer_target_symbol_from_code(code, "modify get_posts to return filtered items")
+    assert sym3 == "get_posts"
+
+    # 4. No symbol mentioned
+    assert infer_target_symbol_from_code(code, "add some general comments") is None
+
+
+def test_heal_truncated_full_file_preserves_unrelated_classes():
+    from app.editing.code_modifier import heal_truncated_full_file
+
+    original = """from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import Optional, List
+
+app = FastAPI()
+
+class Post(BaseModel):
+    title: str
+    content: str
+    published: bool = True
+
+class PostCRUD:
+    def __init__(self):
+        self.posts = [{"id": 1}]
+
+    def get_posts(self) -> List[Post]:
+        return [Post(**p) for p in self.posts]
+
+    def find_post(self, id: int) -> Optional[Post]:
+        for p in self.posts:
+            if p.id == id:
+                return Post(**p)
+"""
+
+    # Model returned ONLY the modified class Post snippet
+    llm_output_snippet = """class Post(BaseModel):
+    title: str
+    content: str
+    published: bool = True
+    rating: Optional[int] = None
+"""
+
+    healed = heal_truncated_full_file(original, llm_output_snippet, "python")
+
+    # Assert Post is updated with rating
+    assert "rating: Optional[int] = None" in healed
+    # Assert PostCRUD and all its methods are completely preserved!
+    assert "class PostCRUD:" in healed
+    assert "def find_post" in healed
+    assert "app = FastAPI()" in healed
+
+
+def test_open_gui_diff_safe(tmp_path):
+    from app.cli.interactive import open_gui_diff
+
+    test_f = tmp_path / "foo.py"
+    test_f.write_text("x = 1\n", encoding="utf-8")
+    # Should not raise exception even if GUI binary is not installed
+    res = open_gui_diff(str(test_f), "x = 2\n")
+    assert isinstance(res, bool)

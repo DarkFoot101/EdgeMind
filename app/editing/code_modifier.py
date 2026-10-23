@@ -10,6 +10,7 @@ Supports:
 Never writes files directly.
 """
 
+import ast
 import re
 from typing import List, Optional
 
@@ -22,6 +23,76 @@ from app.editing.scope import (
     splice_code_slice,
 )
 from app.models.ollama_client import generate_response
+
+
+def heal_truncated_full_file(original_code: str, generated_code: str, language: str = "python") -> str:
+    """
+    Guards against small LLMs returning a single-symbol snippet when a full-file modification was requested.
+    If the LLM returns only one class or function that exists in original_code while original_code
+    contains multiple classes/functions, splices the generated snippet into original_code
+    to protect unaffected classes and functions from catastrophic deletion.
+    """
+    if not original_code or not generated_code:
+        return generated_code
+
+    orig_lines = original_code.splitlines()
+    gen_lines = generated_code.splitlines()
+
+    # If generated code is almost the same size or larger, no snippet healing needed
+    if len(gen_lines) >= len(orig_lines) * 0.8:
+        return generated_code
+
+    lang = (language or "python").lower()
+    if lang == "python":
+        try:
+            gen_tree = ast.parse(generated_code)
+            orig_tree = ast.parse(original_code)
+
+            orig_defs = [
+                n.name for n in orig_tree.body
+                if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
+            gen_defs = [
+                n.name for n in gen_tree.body
+                if isinstance(n, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            ]
+
+            # If original had multiple definitions, but generated only has 1 definition (which was in original)
+            if len(orig_defs) > 1 and len(gen_defs) == 1 and gen_defs[0] in orig_defs:
+                sym_name = gen_defs[0]
+                rng = extract_symbol_range(original_code, sym_name, "python")
+                if rng:
+                    start_ln, end_ln = rng
+                    gen_sym_rng = extract_symbol_range(generated_code, sym_name, "python")
+                    if gen_sym_rng:
+                        gen_slice = extract_code_slice(generated_code, gen_sym_rng[0], gen_sym_rng[1])
+                    else:
+                        gen_slice = generated_code
+
+                    spliced = splice_code_slice(original_code, gen_slice, start_ln, end_ln)
+
+                    # Extract any imports from generated_code not in original_code and prepend them
+                    gen_import_lines = [
+                        l for l in gen_lines
+                        if l.strip().startswith(("import ", "from ")) and l.strip() not in original_code
+                    ]
+                    if gen_import_lines:
+                        spliced = "\n".join(gen_import_lines) + "\n" + spliced
+
+                    return spliced
+        except Exception:
+            pass
+
+    # Generic lexical fallback for single class or function snippet
+    if len(gen_lines) < len(orig_lines) * 0.5 and len(orig_lines) > 10:
+        sym_match = re.search(r"^\s*(?:class|def|function)\s+([a-zA-Z_]\w*)", generated_code, re.MULTILINE)
+        if sym_match:
+            sym_name = sym_match.group(1)
+            rng = extract_symbol_range(original_code, sym_name, lang)
+            if rng:
+                return splice_code_slice(original_code, generated_code, rng[0], rng[1])
+
+    return generated_code
 
 
 def clean_generated_code(code: str) -> str:
@@ -187,7 +258,8 @@ RULES:
 2. Do NOT include markdown code block formatting (```).
 3. Do NOT include explanations, introduction, or commentary.
 4. Preserve existing comments, structure, and formatting wherever appropriate.
-5. Never truncate code or leave placeholders like '// TODO: rest of code'.{framework_rule}
+5. Never truncate code or leave placeholders like '// TODO: rest of code'.
+6. ABSOLUTE PRESERVATION: You are modifying an EXISTING file. You MUST retain ALL existing classes, functions, methods, routes, variables, and imports. NEVER omit untouched parts of the file.{framework_rule}
 """
 
     analysis_context = ""
@@ -214,7 +286,10 @@ Return the complete modified or converted source code in target language ({reque
         kwargs["options"] = options
     raw_response = generate_response(**kwargs)
 
-    return clean_generated_code(raw_response)
+    cleaned = clean_generated_code(raw_response)
+    if request.operation == "modify":
+        cleaned = heal_truncated_full_file(request.source_code, cleaned, request.source_language)
+    return cleaned
 
 
 def generate_candidate_patches(request: EditRequest, count: int = 1) -> List[str]:
